@@ -11,13 +11,13 @@
 		"email",
 		"smtp"
 	],
-	"author": "zou-yu",
+	"author": "ryyr-ry",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/zou-yu/worker-mailer.git"
+		"url": "https://github.com/ryyr-ry/worker-mailer.git"
 	},
 	"license": "MIT",
-	"homepage": "https://github.com/zou-yu/worker-mailer",
+	"homepage": "https://github.com/ryyr-ry/worker-mailer",
 	"scripts": {
 		"build": "tsup",
 		"test": "vitest",
@@ -31,7 +31,7 @@
 		"@cloudflare/vitest-pool-workers": "^0.13.0",
 		"@cloudflare/workers-types": "^4.20240722.0",
 		"@types/libqp": "^1.1.3",
-		"@types/node": "^20.14.12",
+		"@types/node": "^22.15.0",
 		"letterparser": "^0.1.8",
 		"libqp": "^2.1.1",
 		"tsup": "^8.2.3",

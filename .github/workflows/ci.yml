@@ -2,29 +2,30 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main]
 
 jobs:
-  test:
+  check:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-          
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: latest
-          
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-        
+        run: bun install --frozen-lockfile
+
+      - name: Lint & Format
+        run: bun run check
+
+      - name: Type check
+        run: bunx tsc --noEmit
+
       - name: Run tests
-        run: pnpm test
+        run: bunx vitest run
+
+      - name: Build
+        run: bun run build
