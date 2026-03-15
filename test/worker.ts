@@ -3,7 +3,7 @@ import { LogLevel } from "../src/logger"
 import { WorkerMailer, type WorkerMailerOptions } from "../src/mailer"
 
 export default {
-	async fetch(request: Request, env, ctx): Promise<Response> {
+	async fetch(request: Request, _env, _ctx): Promise<Response> {
 		if (request.method !== "POST") {
 			return new Response("Bad request", { status: 405 })
 		}

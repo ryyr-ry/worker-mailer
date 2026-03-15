@@ -16,25 +16,25 @@ export default class Logger {
 		this.prefix = prefix
 	}
 
-	debug(message: string, ...args: any[]): void {
+	debug(message: string, ...args: unknown[]): void {
 		if (this.level <= LogLevel.DEBUG) {
 			console.debug(this.prefix + message, ...args)
 		}
 	}
 
-	info(message: string, ...args: any[]): void {
+	info(message: string, ...args: unknown[]): void {
 		if (this.level <= LogLevel.INFO) {
 			console.info(this.prefix + message, ...args)
 		}
 	}
 
-	warn(message: string, ...args: any[]): void {
+	warn(message: string, ...args: unknown[]): void {
 		if (this.level <= LogLevel.WARN) {
 			console.warn(this.prefix + message, ...args)
 		}
 	}
 
-	error(message: string, ...args: any[]): void {
+	error(message: string, ...args: unknown[]): void {
 		if (this.level <= LogLevel.ERROR) {
 			console.error(this.prefix + message, ...args)
 		}

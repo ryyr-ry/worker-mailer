@@ -1,5 +1,5 @@
 import { connect } from "cloudflare:sockets"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 import { WorkerMailer } from "../../src/mailer"
 
 vi.mock("cloudflare:sockets", () => ({
@@ -7,9 +7,25 @@ vi.mock("cloudflare:sockets", () => ({
 }))
 
 describe("WorkerMailer", () => {
-	let mockSocket: any
-	let mockReader: any
-	let mockWriter: any
+	interface MockReader {
+		read: Mock
+		releaseLock: Mock
+	}
+	interface MockWriter {
+		write: Mock
+		releaseLock: Mock
+	}
+	interface MockSocket {
+		readable: { getReader: () => MockReader }
+		writable: { getWriter: () => MockWriter }
+		opened: Promise<void>
+		close: Mock
+		startTls: Mock
+	}
+
+	let mockSocket: MockSocket
+	let mockReader: MockReader
+	let mockWriter: MockWriter
 
 	beforeEach(() => {
 		// Reset mocks
@@ -36,7 +52,7 @@ describe("WorkerMailer", () => {
 		}
 
 		// Setup connect mock
-		;(connect as any).mockReturnValue(mockSocket)
+		vi.mocked(connect).mockReturnValue(mockSocket as unknown as ReturnType<typeof connect>)
 	})
 
 	describe("connection", () => {
@@ -374,7 +390,7 @@ describe("WorkerMailer", () => {
 			})
 
 			const normalize = (str: string) => str.replace(/\s+/g, " ").trim()
-			const calls = mockWriter.write.mock.calls.map(([arg]: any[]) =>
+			const calls = mockWriter.write.mock.calls.map(([arg]: [Uint8Array]) =>
 				normalize(Buffer.from(arg).toString()),
 			)
 
@@ -456,7 +472,7 @@ describe("WorkerMailer", () => {
 			})
 
 			const normalize = (str: string) => str.replace(/\s+/g, " ").trim()
-			const calls = mockWriter.write.mock.calls.map(([arg]: any[]) =>
+			const calls = mockWriter.write.mock.calls.map(([arg]: [Uint8Array]) =>
 				normalize(Buffer.from(arg).toString()),
 			)
 
@@ -533,7 +549,7 @@ describe("WorkerMailer", () => {
 			})
 
 			const normalize = (str: string) => str.replace(/\s+/g, " ").trim()
-			const calls = mockWriter.write.mock.calls.map(([arg]: any[]) =>
+			const calls = mockWriter.write.mock.calls.map(([arg]: [Uint8Array]) =>
 				normalize(Buffer.from(arg).toString()),
 			)
 

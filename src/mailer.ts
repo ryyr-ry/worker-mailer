@@ -74,8 +74,6 @@ export class WorkerMailer {
 		  }
 		| undefined
 
-	private readonly sendNotificationsTo: string | undefined
-
 	private active = false
 
 	private emailSending: Email | null = null
@@ -155,7 +153,7 @@ export class WorkerMailer {
 				continue
 			}
 			const data = decode(value).toString()
-			this.logger.debug("SMTP server response:\n" + data)
+			this.logger.debug(`SMTP server response:\n${data}`)
 			response = response + data
 			if (!response.endsWith("\n")) {
 				continue
@@ -174,7 +172,7 @@ export class WorkerMailer {
 	}
 
 	private async write(data: string) {
-		this.logger.debug("Write to socket:\n" + data)
+		this.logger.debug(`Write to socket:\n${data}`)
 		await this.writer.write(encode(data))
 	}
 
@@ -202,17 +200,18 @@ export class WorkerMailer {
 				await this.rcpt()
 				await this.data()
 				await this.body()
-				this.emailSending!.setSent()
-			} catch (e: any) {
-				this.logger.error("Failed to send email: " + e.message)
+				this.emailSending?.setSent()
+			} catch (e: unknown) {
+				const message = e instanceof Error ? e.message : String(e)
+				this.logger.error(`Failed to send email: ${message}`)
 				if (!this.active) {
 					return
 				}
 				this.emailSending.setSentError(e)
 				try {
 					await this.rset()
-				} catch (e: any) {
-					await this.close(e)
+				} catch (e: unknown) {
+					await this.close(e instanceof Error ? e : new Error(String(e)))
 				}
 				// If reset successfully, try to send next email
 				// otherwise `this.active` will be set to false in `close` function, and loop will be stopped
@@ -234,7 +233,7 @@ export class WorkerMailer {
 			await this.writeLine("QUIT")
 			await this.readTimeout()
 			this.socket.close().catch(() => this.logger.error("Failed to close socket")) // If server-side close socket first it will never be solved, so just fire and forget
-		} catch (ignore) {
+		} catch (_ignore) {
 			// maybe socket is closed now
 			// anyway, just keep it simple
 		}
@@ -249,7 +248,7 @@ export class WorkerMailer {
 	private async greet() {
 		const response = await this.readTimeout()
 		if (!response.startsWith("220")) {
-			throw new Error("Failed to connect to SMTP server: " + response)
+			throw new Error(`Failed to connect to SMTP server: ${response}`)
 		}
 	}
 
@@ -280,7 +279,7 @@ export class WorkerMailer {
 		await this.writeLine("STARTTLS")
 		const response = await this.readTimeout()
 		if (!response.startsWith("220")) {
-			throw new Error("Failed to start TLS: " + response)
+			throw new Error(`Failed to start TLS: ${response}`)
 		}
 
 		// Upgrade the socket to TLS
@@ -332,7 +331,7 @@ export class WorkerMailer {
 
 	private async authWithPlain() {
 		const userPassBase64 = btoa(
-			`\u0000${this.credentials!.username}\u0000${this.credentials!.password}`,
+			`\u0000${this.credentials?.username}\u0000${this.credentials?.password}`,
 		)
 		await this.writeLine(`AUTH PLAIN ${userPassBase64}`)
 		const authResult = await this.readTimeout()
@@ -345,21 +344,21 @@ export class WorkerMailer {
 		await this.writeLine(`AUTH LOGIN`)
 		const startLoginResponse = await this.readTimeout()
 		if (!startLoginResponse.startsWith("3")) {
-			throw new Error("Invalid login: " + startLoginResponse)
+			throw new Error(`Invalid login: ${startLoginResponse}`)
 		}
 
-		const usernameBase64 = btoa(this.credentials!.username)
+		const usernameBase64 = btoa(this.credentials?.username)
 		await this.writeLine(usernameBase64)
 		const userResponse = await this.readTimeout()
 		if (!userResponse.startsWith("3")) {
-			throw new Error("Failed to login authentication: " + userResponse)
+			throw new Error(`Failed to login authentication: ${userResponse}`)
 		}
 
-		const passwordBase64 = btoa(this.credentials!.password)
+		const passwordBase64 = btoa(this.credentials?.password)
 		await this.writeLine(passwordBase64)
 		const authResult = await this.readTimeout()
 		if (!authResult.startsWith("2")) {
-			throw new Error("Failed to login authentication: " + authResult)
+			throw new Error(`Failed to login authentication: ${authResult}`)
 		}
 	}
 
@@ -368,14 +367,14 @@ export class WorkerMailer {
 		const challengeResponse = await this.readTimeout()
 		const challengeWithBase64Encoded = challengeResponse.match(/^334\s+(.+)$/)?.pop()
 		if (!challengeWithBase64Encoded) {
-			throw new Error("Invalid CRAM-MD5 challenge: " + challengeResponse)
+			throw new Error(`Invalid CRAM-MD5 challenge: ${challengeResponse}`)
 		}
 
 		// solve challenge
 		const challenge = atob(challengeWithBase64Encoded)
 
 		// Import password as key
-		const keyData = encode(this.credentials!.password)
+		const keyData = encode(this.credentials?.password)
 		const key = await crypto.subtle.importKey(
 			"raw",
 			keyData,
@@ -393,15 +392,15 @@ export class WorkerMailer {
 			.map((b) => b.toString(16).padStart(2, "0"))
 			.join("")
 
-		await this.writeLine(btoa(`${this.credentials!.username} ${challengeSolved}`))
+		await this.writeLine(btoa(`${this.credentials?.username} ${challengeSolved}`))
 		const authResult = await this.readTimeout()
 		if (!authResult.startsWith("2")) {
-			throw new Error("Failed to cram-md5 authentication: " + authResult)
+			throw new Error(`Failed to cram-md5 authentication: ${authResult}`)
 		}
 	}
 
 	private async mail() {
-		let message = `MAIL FROM: <${this.emailSending!.from.email}>`
+		let message = `MAIL FROM: <${this.emailSending?.from.email}>`
 		if (this.supportsDSN) {
 			message += ` ${this.retBuilder()}`
 			if (this.emailSending?.dsnOverride?.envelopeId) {
@@ -418,9 +417,9 @@ export class WorkerMailer {
 
 	private async rcpt() {
 		const allRecipients = [
-			...this.emailSending!.to,
-			...(this.emailSending!.cc || []),
-			...(this.emailSending!.bcc || []),
+			...(this.emailSending?.to ?? []),
+			...(this.emailSending?.cc ?? []),
+			...(this.emailSending?.bcc ?? []),
 		]
 
 		for (const user of allRecipients) {
@@ -445,10 +444,10 @@ export class WorkerMailer {
 	}
 
 	private async body() {
-		await this.write(this.emailSending!.getEmailData())
+		await this.write(this.emailSending?.getEmailData())
 		const response = await this.readTimeout()
 		if (!response.startsWith("2")) {
-			throw new Error("Failed send email body: " + response)
+			throw new Error(`Failed send email body: ${response}`)
 		}
 	}
 
@@ -463,19 +462,19 @@ export class WorkerMailer {
 	private notificationBuilder() {
 		const notifications: string[] = []
 		if (
-			(this.emailSending?.dsnOverride?.NOTIFY && this.emailSending?.dsnOverride?.NOTIFY?.SUCCESS) ||
+			this.emailSending?.dsnOverride?.NOTIFY?.SUCCESS ||
 			(!this.emailSending?.dsnOverride?.NOTIFY && this.dsn?.NOTIFY?.SUCCESS)
 		) {
 			notifications.push("SUCCESS")
 		}
 		if (
-			(this.emailSending?.dsnOverride?.NOTIFY && this.emailSending?.dsnOverride?.NOTIFY?.FAILURE) ||
+			this.emailSending?.dsnOverride?.NOTIFY?.FAILURE ||
 			(!this.emailSending?.dsnOverride?.NOTIFY && this.dsn?.NOTIFY?.FAILURE)
 		) {
 			notifications.push("FAILURE")
 		}
 		if (
-			(this.emailSending?.dsnOverride?.NOTIFY && this.emailSending?.dsnOverride?.NOTIFY?.DELAY) ||
+			this.emailSending?.dsnOverride?.NOTIFY?.DELAY ||
 			(!this.emailSending?.dsnOverride?.NOTIFY && this.dsn?.NOTIFY?.DELAY)
 		) {
 			notifications.push("DELAY")
@@ -486,13 +485,13 @@ export class WorkerMailer {
 	private retBuilder() {
 		const ret: string[] = []
 		if (
-			(this.emailSending?.dsnOverride?.RET && this.emailSending?.dsnOverride?.RET?.HEADERS) ||
+			this.emailSending?.dsnOverride?.RET?.HEADERS ||
 			(!this.emailSending?.dsnOverride?.RET && this.dsn?.RET?.HEADERS)
 		) {
 			ret.push("HDRS")
 		}
 		if (
-			(this.emailSending?.dsnOverride?.RET && this.emailSending?.dsnOverride?.RET?.FULL) ||
+			this.emailSending?.dsnOverride?.RET?.FULL ||
 			(!this.emailSending?.dsnOverride?.RET && this.dsn?.RET?.FULL)
 		) {
 			ret.push("FULL")

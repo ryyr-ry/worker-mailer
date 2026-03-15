@@ -107,7 +107,7 @@ export class Email {
 		} else {
 			this.reply = options.reply
 		}
-		this.to = Email.toUsers(options.to)!
+		this.to = Email.toUsers(options.to) ?? []
 		this.cc = Email.toUsers(options.cc)
 		this.bcc = Email.toUsers(options.bcc)
 
@@ -246,24 +246,24 @@ export class Email {
 		this.resolveCC()
 		this.resolveBCC()
 		this.resolveSubject()
-		this.headers["Date"] = this.headers["Date"] ?? new Date().toUTCString()
+		this.headers.Date = this.headers.Date ?? new Date().toUTCString()
 		this.headers["Message-ID"] =
 			this.headers["Message-ID"] ?? `<${crypto.randomUUID()}@${this.from.email.split("@").pop()}>`
 	}
 
 	private resolveFrom() {
-		if (this.headers["From"]) {
+		if (this.headers.From) {
 			return
 		}
 		let from = this.from.email
 		if (this.from.name) {
 			from = `"${encodeHeader(this.from.name)}" <${from}>`
 		}
-		this.headers["From"] = from
+		this.headers.From = from
 	}
 
 	private resolveTo() {
-		if (this.headers["To"]) {
+		if (this.headers.To) {
 			return
 		}
 		const toAddresses = this.to.map((user) => {
@@ -272,15 +272,15 @@ export class Email {
 			}
 			return user.email
 		})
-		this.headers["To"] = toAddresses.join(", ")
+		this.headers.To = toAddresses.join(", ")
 	}
 
 	private resolveSubject() {
-		if (this.headers["Subject"]) {
+		if (this.headers.Subject) {
 			return
 		}
 		if (this.subject) {
-			this.headers["Subject"] = encodeHeader(this.subject)
+			this.headers.Subject = encodeHeader(this.subject)
 		}
 	}
 
@@ -298,7 +298,7 @@ export class Email {
 	}
 
 	private resolveCC() {
-		if (this.headers["CC"]) {
+		if (this.headers.CC) {
 			return
 		}
 		if (this.cc) {
@@ -308,12 +308,12 @@ export class Email {
 				}
 				return user.email
 			})
-			this.headers["CC"] = ccAddresses.join(", ")
+			this.headers.CC = ccAddresses.join(", ")
 		}
 	}
 
 	private resolveBCC() {
-		if (this.headers["BCC"]) {
+		if (this.headers.BCC) {
 			return
 		}
 		if (this.bcc) {
@@ -323,7 +323,7 @@ export class Email {
 				}
 				return user.email
 			})
-			this.headers["BCC"] = bccAddresses.join(", ")
+			this.headers.BCC = bccAddresses.join(", ")
 		}
 	}
 }

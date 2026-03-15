@@ -104,11 +104,11 @@ describe("Email", () => {
 			const msg = extract(unstuffedData)
 
 			// expect the text to be the same if linebreaks are removed (we are adding a space and removing all double spaces due to the way the text is wrapped)
-			expect(msg.text!.replace(/\n/g, " ").replaceAll("  ", " ")).toBe(
+			expect(msg.text?.replace(/\n/g, " ").replaceAll("  ", " ")).toBe(
 				"Hello, this is a test email with a long text. ".repeat(50).trim(),
 			)
-			expect(msg.html!.replace(/\n/g, " ").replaceAll("  ", " ")).toBe(
-				"<p>" + "Hello, this is a test email with a long text. ".repeat(50) + "</p>",
+			expect(msg.html?.replace(/\n/g, " ").replaceAll("  ", " ")).toBe(
+				`<p>${"Hello, this is a test email with a long text. ".repeat(50)}</p>`,
 			)
 			const lines = data.split("\r\n")
 

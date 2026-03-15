@@ -6,14 +6,15 @@ export class BlockingQueue<T> {
 		if (!this.resolvers.length) {
 			this.addWrapper()
 		}
-		this.resolvers.shift()!(value)
+		this.resolvers.shift()?.(value)
 	}
 
 	public async dequeue(): Promise<T> {
 		if (!this.values.length) {
 			this.addWrapper()
 		}
-		return this.values.shift()!
+		// addWrapper() guarantees values has at least one element
+		return this.values.shift() as Promise<T>
 	}
 
 	public get length(): number {

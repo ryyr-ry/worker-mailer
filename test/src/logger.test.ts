@@ -3,10 +3,10 @@ import Logger, { LogLevel } from "../../src/logger"
 
 describe("Logger", () => {
 	let consoleSpy: {
-		debug: any
-		info: any
-		warn: any
-		error: any
+		debug: ReturnType<typeof vi.spyOn>
+		info: ReturnType<typeof vi.spyOn>
+		warn: ReturnType<typeof vi.spyOn>
+		error: ReturnType<typeof vi.spyOn>
 	}
 
 	beforeEach(() => {

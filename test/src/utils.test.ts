@@ -28,7 +28,7 @@ describe("BlockingQueue", () => {
 		expect(queue.length).toBe(0)
 
 		// When we call dequeue(), it creates a promise but immediately removes it from the queue
-		const dequeuePromise = queue.dequeue()
+		const _dequeuePromise = queue.dequeue()
 		expect(queue.length).toBe(0)
 
 		// When we have a pending dequeue and enqueue a value, the length remains 0
@@ -43,7 +43,7 @@ describe("BlockingQueue", () => {
 
 	it("should clear the queue", async () => {
 		queue.enqueue(1)
-		const dequeuePromise = queue.dequeue()
+		const _dequeuePromise = queue.dequeue()
 		queue.clear()
 
 		expect(queue.length).toBe(0)
@@ -366,7 +366,7 @@ describe("encodeQuotedPrintable", () => {
 		})
 
 		it("should handle line with exactly 76 chars before non-ASCII", () => {
-			const input = "a".repeat(75) + "世"
+			const input = `${"a".repeat(75)}世`
 			const result = encodeQuotedPrintable(input)
 			const decoded = libqp.decode(result).toString()
 			expect(decoded).toBe(input)
