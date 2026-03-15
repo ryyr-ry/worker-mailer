@@ -686,12 +686,15 @@ describe("encodeHeader", () => {
 			expect(result).toBe("   ")
 		})
 
-		it("should handle very long non-ASCII text", () => {
+		it("should split long non-ASCII text into multiple encoded-words (RFC 2047 75-char limit)", () => {
 			const input = "你好".repeat(50)
 			const result = encodeHeader(input)
-			expect(result).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
-			// Note: RFC 2047 has length limits, but we don't enforce them yet
-			// In production, long headers should be split into multiple encoded-words
+			const words = result.split("\r\n ")
+			for (const word of words) {
+				expect(word.length).toBeLessThanOrEqual(75)
+				expect(word).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+			}
+			expect(words.length).toBeGreaterThan(1)
 		})
 
 		it("should handle single character", () => {
@@ -855,7 +858,10 @@ describe("encodeHeader", () => {
 		it("should encode subject with date", () => {
 			const input = "会议通知 - 2024年1月1日"
 			const result = encodeHeader(input)
-			expect(result).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+			const words = result.split("\r\n ")
+			for (const word of words) {
+				expect(word).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+			}
 		})
 
 		it("should encode subject with numbers and symbols", () => {

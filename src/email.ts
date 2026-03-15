@@ -12,25 +12,37 @@ export function encodeHeader(text: string): string {
 		return text
 	}
 	const bytes = encode(text)
-	let encoded = ""
+	const prefix = "=?UTF-8?Q?"
+	const suffix = "?="
+	const overhead = prefix.length + suffix.length
+	const maxPayload = 75 - overhead
 
-	for (const byte of bytes) {
-		// RFC 2047 specific rules for headers:
-		// - Printable ASCII except ?, =, _, and space
-		// - Space becomes underscore
+	const words: string[] = []
+	let current = ""
+
+	for (let i = 0; i < bytes.length; i++) {
+		const byte = bytes[i]
+		let fragment: string
 		if (byte >= 33 && byte <= 126 && byte !== 63 && byte !== 61 && byte !== 95) {
-			// 63 = '?', 61 = '=', 95 = '_'
-			encoded += String.fromCharCode(byte)
+			fragment = String.fromCharCode(byte)
 		} else if (byte === 32) {
-			// Space becomes underscore in headers (RFC 2047)
-			encoded += "_"
+			fragment = "_"
 		} else {
-			// Encode everything else
-			encoded += `=${byte.toString(16).toUpperCase().padStart(2, "0")}`
+			fragment = `=${byte.toString(16).toUpperCase().padStart(2, "0")}`
+		}
+
+		if (current.length + fragment.length > maxPayload) {
+			words.push(`${prefix}${current}${suffix}`)
+			current = fragment
+		} else {
+			current += fragment
 		}
 	}
+	if (current.length > 0) {
+		words.push(`${prefix}${current}${suffix}`)
+	}
 
-	return `=?UTF-8?Q?${encoded}?=`
+	return words.join("\r\n ")
 }
 
 export type User = { name?: string; email: string }
