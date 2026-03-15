@@ -168,9 +168,14 @@ describe("convenience", () => {
 			})
 		})
 
-		it("credentials 未設定でも空文字で返す", () => {
+		it("credentials 未設定時は undefined を返す", () => {
 			const options = gmailPreset({})
-			expect(options.credentials).toEqual({ username: "", password: "" })
+			expect(options.credentials).toBeUndefined()
+		})
+
+		it("SMTP_USER のみ設定時は credentials が undefined を返す", () => {
+			expect(gmailPreset({ SMTP_USER: "user" }).credentials).toBeUndefined()
+			expect(outlookPreset({ SMTP_PASS: "pass" }).credentials).toBeUndefined()
 		})
 	})
 
@@ -270,13 +275,165 @@ describe("convenience", () => {
 				SMTP_AUTH_TYPE: "plain",
 			}
 
-			await sendOnce(env, {
+			const result = await sendOnce(env, {
 				from: "sender@example.com",
 				to: "recipient@example.com",
 				subject: "Test",
 				text: "Hello",
 			})
 
+			expect(connect).toHaveBeenCalled()
+			expect(result).toBeDefined()
+			expect(result.accepted).toEqual(["recipient@example.com"])
+			expect(result.rejected).toEqual([])
+			expect(typeof result.messageId).toBe("string")
+			expect(typeof result.responseTime).toBe("number")
+			expect(typeof result.response).toBe("string")
+		})
+	})
+
+	describe("fromEnv prefix カスタマイズ", () => {
+		it("カスタムプレフィックスで環境変数を読み取れる", () => {
+			const env = {
+				MAIL_HOST: "smtp.custom.com",
+				MAIL_PORT: "465",
+				MAIL_USER: "custom-user",
+				MAIL_PASS: "custom-pass",
+				MAIL_SECURE: "true",
+			}
+			const options = fromEnv(env, "MAIL_")
+			expect(options.host).toBe("smtp.custom.com")
+			expect(options.port).toBe(465)
+			expect(options.credentials).toEqual({
+				username: "custom-user",
+				password: "custom-pass",
+			})
+			expect(options.secure).toBe(true)
+		})
+
+		it("デフォルトプレフィックスは SMTP_ のまま動作する", () => {
+			const env = {
+				SMTP_HOST: "smtp.example.com",
+				SMTP_PORT: "587",
+			}
+			const options = fromEnv(env)
+			expect(options.host).toBe("smtp.example.com")
+			expect(options.port).toBe(587)
+		})
+
+		it("カスタムプレフィックスで必須変数未設定時にエラーをスローする", () => {
+			const env = { MAIL_HOST: "smtp.custom.com" }
+			expect(() => fromEnv(env, "MAIL_")).toThrow("MAIL_PORT")
+		})
+	})
+
+	describe("createFromEnv / sendOnce with prefix", () => {
+		let mockReader: { read: Mock; releaseLock: Mock }
+		let mockWriter: { write: Mock; releaseLock: Mock }
+
+		beforeEach(() => {
+			vi.clearAllMocks()
+
+			mockReader = { read: vi.fn(), releaseLock: vi.fn() }
+			mockWriter = { write: vi.fn(), releaseLock: vi.fn() }
+
+			const mockSocket = {
+				readable: { getReader: () => mockReader },
+				writable: { getWriter: () => mockWriter },
+				opened: Promise.resolve(),
+				close: vi.fn().mockResolvedValue(undefined),
+				startTls: vi.fn().mockReturnValue({
+					readable: { getReader: () => mockReader },
+					writable: { getWriter: () => mockWriter },
+				}),
+			}
+
+			vi.mocked(connect).mockReturnValue(mockSocket as unknown as ReturnType<typeof connect>)
+		})
+
+		it("createFromEnv にカスタムプレフィックスを渡せる", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250-ok\r\n250-AUTH PLAIN LOGIN\r\n250 STARTTLS\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 TLS ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250-ok\r\n250-AUTH PLAIN LOGIN\r\n250 OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Auth OK\r\n"),
+				})
+
+			const env = {
+				MAIL_HOST: "smtp.example.com",
+				MAIL_PORT: "587",
+				MAIL_USER: "user",
+				MAIL_PASS: "pass",
+				MAIL_AUTH_TYPE: "plain",
+			}
+
+			const mailer = await createFromEnv(env, "MAIL_")
+			expect(mailer).toBeDefined()
+			expect(connect).toHaveBeenCalled()
+		})
+
+		it("sendOnce にカスタムプレフィックスを渡せる", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250-ok\r\n250-AUTH PLAIN LOGIN\r\n250 STARTTLS\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 TLS ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250-ok\r\n250-AUTH PLAIN LOGIN\r\n250 OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Auth OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 MAIL OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 RCPT OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("354 Start mail input\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const env = {
+				MAIL_HOST: "smtp.example.com",
+				MAIL_PORT: "587",
+				MAIL_USER: "user",
+				MAIL_PASS: "pass",
+				MAIL_AUTH_TYPE: "plain",
+			}
+
+			const result = await sendOnce(
+				env,
+				{
+					from: "sender@example.com",
+					to: "recipient@example.com",
+					subject: "Test",
+					text: "Hello",
+				},
+				"MAIL_",
+			)
+			expect(result).toBeDefined()
 			expect(connect).toHaveBeenCalled()
 		})
 	})

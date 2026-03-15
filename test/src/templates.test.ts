@@ -479,6 +479,32 @@ describe("html テンプレートリテラルタグ", () => {
 		const result = html`<text>通知が ${count} 件あります</text>`
 		expect(result).toContain("通知が 42 件あります")
 	})
+
+	it("補間値にHTMLタグが含まれる場合エスケープされること", () => {
+		const userInput = '<script>alert("xss")</script>'
+		const result = html`<text>${userInput}</text>`
+		expect(result).not.toContain("<script>")
+		expect(result).toContain("&lt;script&gt;")
+		expect(result).toContain("&lt;/script&gt;")
+	})
+
+	it("補間値の&や引用符がエスケープされること", () => {
+		const input = "Tom & Jerry \"friends\" 'forever'"
+		const result = html`<text>${input}</text>`
+		expect(result).toContain("Tom &amp; Jerry &quot;friends&quot; &#x27;forever&#x27;")
+	})
+
+	it("補間値に特殊文字がない場合はそのまま出力されること", () => {
+		const name = "太郎"
+		const result = html`<heading>こんにちは ${name}</heading>`
+		expect(result).toContain("こんにちは 太郎")
+	})
+
+	it("テンプレートリテラルの静的部分はエスケープされないこと", () => {
+		const result = html`<heading>タイトル</heading>`
+		expect(result).toContain("<h1")
+		expect(result).toContain("</h1>")
+	})
 })
 
 // ── デフォルト値のテスト ─────────────────────────────────────────────────────

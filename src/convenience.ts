@@ -2,6 +2,7 @@ import type { EmailOptions } from "./email"
 import { LogLevel } from "./logger"
 import type { AuthType, WorkerMailerOptions } from "./mailer"
 import { WorkerMailer } from "./mailer"
+import type { SendResult } from "./result"
 
 function getString(env: Record<string, unknown>, key: string): string | undefined {
 	const value = env[key]
@@ -48,22 +49,22 @@ function parseLogLevel(value: string | undefined): LogLevel | undefined {
 	return levels[upper]
 }
 
-export function fromEnv(env: Record<string, unknown>): WorkerMailerOptions {
-	const host = requireString(env, "SMTP_HOST")
-	const portStr = requireString(env, "SMTP_PORT")
+export function fromEnv(env: Record<string, unknown>, prefix = "SMTP_"): WorkerMailerOptions {
+	const host = requireString(env, `${prefix}HOST`)
+	const portStr = requireString(env, `${prefix}PORT`)
 	const port = Number.parseInt(portStr, 10)
 	if (Number.isNaN(port)) {
-		throw new Error(`環境変数 SMTP_PORT の値 "${portStr}" は有効なポート番号ではありません。`)
+		throw new Error(`環境変数 ${prefix}PORT の値 "${portStr}" は有効なポート番号ではありません。`)
 	}
 
-	const user = getString(env, "SMTP_USER")
-	const pass = getString(env, "SMTP_PASS")
-	const secure = parseBoolean(getString(env, "SMTP_SECURE"))
-	const startTls = parseBoolean(getString(env, "SMTP_START_TLS"))
-	const authType = parseAuthType(getString(env, "SMTP_AUTH_TYPE"))
-	const ehloHostname = getString(env, "SMTP_EHLO_HOSTNAME")
-	const logLevel = parseLogLevel(getString(env, "SMTP_LOG_LEVEL"))
-	const maxRetriesStr = getString(env, "SMTP_MAX_RETRIES")
+	const user = getString(env, `${prefix}USER`)
+	const pass = getString(env, `${prefix}PASS`)
+	const secure = parseBoolean(getString(env, `${prefix}SECURE`))
+	const startTls = parseBoolean(getString(env, `${prefix}START_TLS`))
+	const authType = parseAuthType(getString(env, `${prefix}AUTH_TYPE`))
+	const ehloHostname = getString(env, `${prefix}EHLO_HOSTNAME`)
+	const logLevel = parseLogLevel(getString(env, `${prefix}LOG_LEVEL`))
+	const maxRetriesStr = getString(env, `${prefix}MAX_RETRIES`)
 	const maxRetries = maxRetriesStr !== undefined ? Number.parseInt(maxRetriesStr, 10) : undefined
 
 	const options: WorkerMailerOptions = { host, port }
@@ -83,33 +84,34 @@ export function fromEnv(env: Record<string, unknown>): WorkerMailerOptions {
 	return options
 }
 
-export async function createFromEnv(env: Record<string, unknown>): Promise<WorkerMailer> {
-	const options = fromEnv(env)
+export async function createFromEnv(
+	env: Record<string, unknown>,
+	prefix = "SMTP_",
+): Promise<WorkerMailer> {
+	const options = fromEnv(env, prefix)
 	return WorkerMailer.connect(options)
 }
 
 export async function sendOnce(
 	env: Record<string, unknown>,
 	emailOptions: EmailOptions,
-): Promise<void> {
-	const mailer = await createFromEnv(env)
+	prefix = "SMTP_",
+): Promise<SendResult> {
+	const mailer = await createFromEnv(env, prefix)
 	try {
-		await mailer.send(emailOptions)
+		return await mailer.send(emailOptions)
 	} finally {
 		await mailer.close()
 	}
 }
 
-function credentialsFromEnv(env: Record<string, unknown>): {
-	username: string
-	password: string
-} {
+function credentialsFromEnv(
+	env: Record<string, unknown>,
+): { username: string; password: string } | undefined {
 	const user = getString(env, "SMTP_USER")
 	const pass = getString(env, "SMTP_PASS")
-	return {
-		username: user ?? "",
-		password: pass ?? "",
-	}
+	if (user === undefined || pass === undefined) return undefined
+	return { username: user, password: pass }
 }
 
 export function gmailPreset(env: Record<string, unknown>): WorkerMailerOptions {

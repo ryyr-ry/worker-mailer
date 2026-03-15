@@ -1,5 +1,6 @@
 import type { SendResult } from "./result"
 import { arrayBufferToBase64, encode, encodeQuotedPrintable } from "./utils"
+import { validateEmail as checkEmail } from "./validate"
 
 function isAsciiOnly(text: string): boolean {
 	for (let i = 0; i < text.length; i++) {
@@ -114,24 +115,12 @@ export class Email {
 	public setSentResult!: (result: SendResult) => void
 	public setSentError!: (e: unknown) => void
 
-	private resolveSent!: () => void
-	private rejectSent!: (e: unknown) => void
-
 	public sentResult = new Promise<SendResult>((resolve, reject) => {
-		this.setSentResult = (result: SendResult) => {
-			resolve(result)
-			this.resolveSent()
-		}
-		this.setSentError = (e: unknown) => {
-			reject(e)
-			this.rejectSent(e)
-		}
+		this.setSentResult = resolve
+		this.setSentError = reject
 	})
 
-	public sent = new Promise<void>((resolve, reject) => {
-		this.resolveSent = resolve
-		this.rejectSent = reject
-	})
+	public readonly sent: Promise<void> = this.sentResult.then(() => {})
 
 	public setSent(): void {
 		this.setSentResult({
@@ -181,8 +170,6 @@ export class Email {
 
 	private static readonly CRLF_PATTERN = /[\r\n]/
 
-	private static readonly EMAIL_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/
-
 	private validateNoCRLF() {
 		if (Email.CRLF_PATTERN.test(this.subject)) {
 			throw new Error("CRLF injection detected in subject")
@@ -214,8 +201,14 @@ export class Email {
 		}
 	}
 
+	private static readonly ANGLE_BRACKET_PATTERN = /[<>]/
+
 	private validateEmail(email: string, field: string) {
-		if (!Email.EMAIL_PATTERN.test(email)) {
+		if (Email.ANGLE_BRACKET_PATTERN.test(email)) {
+			throw new Error(`Invalid email address in ${field}: ${email}`)
+		}
+		const result = checkEmail(email)
+		if (!result.valid) {
 			throw new Error(`Invalid email address in ${field}: ${email}`)
 		}
 	}

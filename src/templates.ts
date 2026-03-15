@@ -316,7 +316,7 @@ const TAG_TRANSFORMS: ReadonlyArray<{
 export function html(strings: TemplateStringsArray, ...values: unknown[]): string {
 	let raw = strings[0]
 	for (let i = 0; i < values.length; i++) {
-		raw += String(values[i])
+		raw += escapeHtml(String(values[i]))
 		raw += strings[i + 1]
 	}
 

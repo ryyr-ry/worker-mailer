@@ -202,4 +202,97 @@ describe("sendBatch", () => {
 
 		await mailer.close()
 	})
+
+	it("concurrency: 1 が逐次送信と同じ結果を返すこと", async () => {
+		setupConnectionMocks()
+		setupSendSuccess()
+		setupSendSuccess()
+		mockReader.read.mockResolvedValueOnce({
+			value: new TextEncoder().encode("221 Bye\r\n"),
+		})
+
+		const mailer = await WorkerMailer.connect(connectionOptions)
+
+		const emails = [makeEmail("Email 1"), makeEmail("Email 2")]
+		const results = await sendBatch(mailer, emails, { concurrency: 1 })
+
+		expect(results).toHaveLength(2)
+		for (const r of results) {
+			expect(r.success).toBe(true)
+			expect(r.result).toBeDefined()
+			expect(r.result?.response).toContain("250")
+		}
+
+		await mailer.close()
+	})
+
+	it("concurrency: 2 で複数メールが送信されること", async () => {
+		setupConnectionMocks()
+		setupSendSuccess()
+		setupSendSuccess()
+		setupSendSuccess()
+		mockReader.read.mockResolvedValueOnce({
+			value: new TextEncoder().encode("221 Bye\r\n"),
+		})
+
+		const mailer = await WorkerMailer.connect(connectionOptions)
+
+		const emails = [makeEmail("Email 1"), makeEmail("Email 2"), makeEmail("Email 3")]
+		const results = await sendBatch(mailer, emails, { concurrency: 2 })
+
+		expect(results).toHaveLength(3)
+		for (const r of results) {
+			expect(r.success).toBe(true)
+			expect(r.result).toBeDefined()
+		}
+
+		await mailer.close()
+	})
+
+	it("concurrency がメール数を超える場合でも正常に動作すること", async () => {
+		setupConnectionMocks()
+		setupSendSuccess()
+		setupSendSuccess()
+		mockReader.read.mockResolvedValueOnce({
+			value: new TextEncoder().encode("221 Bye\r\n"),
+		})
+
+		const mailer = await WorkerMailer.connect(connectionOptions)
+
+		const emails = [makeEmail("Email 1"), makeEmail("Email 2")]
+		const results = await sendBatch(mailer, emails, { concurrency: 10 })
+
+		expect(results).toHaveLength(2)
+		for (const r of results) {
+			expect(r.success).toBe(true)
+		}
+
+		await mailer.close()
+	})
+
+	it("concurrency 指定時に continueOnError: false で中断されること", async () => {
+		setupConnectionMocks()
+		setupSendSuccess()
+		setupSendFailure()
+		mockReader.read.mockResolvedValueOnce({
+			value: new TextEncoder().encode("250 OK\r\n"),
+		})
+		mockReader.read.mockResolvedValueOnce({
+			value: new TextEncoder().encode("221 Bye\r\n"),
+		})
+
+		const mailer = await WorkerMailer.connect(connectionOptions)
+
+		const emails = [makeEmail("Email 1"), makeEmail("Email 2"), makeEmail("Email 3")]
+		const results = await sendBatch(mailer, emails, {
+			concurrency: 2,
+			continueOnError: false,
+		})
+
+		expect(results.length).toBeLessThanOrEqual(3)
+		const failed = results.filter((r) => !r.success)
+		expect(failed.length).toBeGreaterThanOrEqual(1)
+
+		await mailer.close()
+	})
 })
