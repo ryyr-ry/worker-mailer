@@ -1,3 +1,4 @@
+import type { SendResult } from "./result"
 import { arrayBufferToBase64, encode, encodeQuotedPrintable } from "./utils"
 
 function isAsciiOnly(text: string): boolean {
@@ -110,14 +111,44 @@ export class Email {
 
 	public readonly headers: Record<string, string>
 
-	public setSent!: () => void
+	public setSentResult!: (result: SendResult) => void
 	public setSentError!: (e: unknown) => void
-	public sent = new Promise<void>((resolve, reject) => {
-		this.setSent = resolve
-		this.setSentError = reject
+
+	private resolveSent!: () => void
+	private rejectSent!: (e: unknown) => void
+
+	public sentResult = new Promise<SendResult>((resolve, reject) => {
+		this.setSentResult = (result: SendResult) => {
+			resolve(result)
+			this.resolveSent()
+		}
+		this.setSentError = (e: unknown) => {
+			reject(e)
+			this.rejectSent(e)
+		}
 	})
 
+	public sent = new Promise<void>((resolve, reject) => {
+		this.resolveSent = resolve
+		this.rejectSent = reject
+	})
+
+	public setSent(): void {
+		this.setSentResult({
+			messageId: this.headers["Message-ID"] ?? "",
+			accepted: [],
+			rejected: [],
+			responseTime: 0,
+			response: "",
+		})
+	}
+
 	constructor(options: EmailOptions) {
+		// sentResult が主要なエラーチャネルだが、sent のみ使用されるケースもあるため
+		// 両方の未処理拒否を抑制
+		this.sentResult.catch(() => {})
+		this.sent.catch(() => {})
+
 		if (!options.text && !options.html) {
 			throw new Error("At least one of text or html must be provided")
 		}

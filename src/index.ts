@@ -1,3 +1,8 @@
+export * from "./batch"
+export * from "./convenience"
 export * from "./email"
 export { LogLevel } from "./logger"
 export * from "./mailer"
+export * from "./result"
+export * from "./templates"
+export * from "./validate"

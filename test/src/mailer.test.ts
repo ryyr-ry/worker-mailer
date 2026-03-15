@@ -1298,6 +1298,272 @@ describe("WorkerMailer", () => {
 			expect(mockSocket.close).toHaveBeenCalled()
 		})
 	})
+
+	describe("send() returns SendResult", () => {
+		it("should return SendResult with messageId and response", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Sender OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Recipient OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("354 Start mail input\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 2.0.0 Ok: queued as ABC123\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+			})
+
+			const result = await mailer.send({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Test",
+				text: "Hello",
+			})
+
+			expect(result).toBeDefined()
+			expect(result.messageId).toBeTruthy()
+			expect(result.accepted).toContain("recipient@example.com")
+			expect(result.rejected).toEqual([])
+			expect(result.responseTime).toBeGreaterThanOrEqual(0)
+			expect(result.response).toContain("250")
+
+			await mailer.close()
+		})
+
+		it("should include all recipients in accepted", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Sender OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Recipient OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Recipient OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("354 Start mail input\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Message accepted\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+			})
+
+			const result = await mailer.send({
+				from: "sender@example.com",
+				to: ["a@example.com", "b@example.com"],
+				subject: "Test",
+				text: "Hello",
+			})
+
+			expect(result.accepted).toEqual(["a@example.com", "b@example.com"])
+
+			await mailer.close()
+		})
+	})
+
+	describe("autoReconnect", () => {
+		it("should store autoReconnect option", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+				autoReconnect: true,
+			})
+
+			expect((mailer as unknown as { autoReconnect: boolean }).autoReconnect).toBe(true)
+
+			await mailer.close()
+		})
+
+		it("should default autoReconnect to false", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+			})
+
+			expect((mailer as unknown as { autoReconnect: boolean }).autoReconnect).toBe(false)
+
+			await mailer.close()
+		})
+
+		it("should reconnect and send successfully after connection drop", async () => {
+			// 初回接続
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			let reconnectSocketReader: MockReader
+			let reconnectSocketWriter: MockWriter
+			const reconnectSocket: MockSocket = {
+				readable: {
+					getReader: () => {
+						return reconnectSocketReader
+					},
+				},
+				writable: {
+					getWriter: () => {
+						return reconnectSocketWriter
+					},
+				},
+				opened: Promise.resolve(),
+				close: vi.fn(),
+				startTls: vi.fn(),
+			}
+
+			reconnectSocketReader = {
+				read: vi.fn(),
+				releaseLock: vi.fn(),
+			}
+			reconnectSocketWriter = {
+				write: vi.fn(),
+				releaseLock: vi.fn(),
+			}
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+				autoReconnect: true,
+				maxRetries: 1,
+			})
+
+			// 送信試行1回目: 接続断（MAIL FROM で接続が切れる）
+			mockReader.read.mockResolvedValueOnce({ value: undefined, done: true })
+			// RSET も失敗（接続切断なので）
+			mockReader.read.mockResolvedValueOnce({ value: undefined, done: true })
+
+			// 再接続時: connect() が新しいソケットを返す
+			vi.mocked(connect).mockReturnValueOnce(
+				reconnectSocket as unknown as ReturnType<typeof connect>,
+			)
+
+			// 再接続時の initializeSmtpSession
+			reconnectSocketReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				// 再接続後の送信成功
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Sender OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Recipient OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("354 Start mail input\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Message accepted\r\n"),
+				})
+				// close
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const result = await mailer.send({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Reconnect Test",
+				text: "Hello after reconnect",
+			})
+
+			expect(result).toBeDefined()
+			expect(result.accepted).toContain("recipient@example.com")
+
+			await mailer.close()
+		})
+	})
 })
 
 describe("WorkerMailerPool", () => {

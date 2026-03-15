@@ -1,6 +1,7 @@
 import { extract } from "letterparser"
 import { describe, expect, it } from "vitest"
 import { Email, type EmailOptions, encodeHeader } from "../../src/email"
+import type { SendResult } from "../../src/result"
 
 describe("Email", () => {
 	describe("constructor", () => {
@@ -391,6 +392,75 @@ describe("Email", () => {
 			const error = new Error("Test error")
 			setTimeout(() => email.setSentError(error), 0)
 			await expect(email.sent).rejects.toBe(error)
+		})
+	})
+
+	describe("sentResult promise", () => {
+		it("should resolve with SendResult when setSentResult is called", async () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Test Subject",
+				text: "Hello World",
+			})
+
+			const result: SendResult = {
+				messageId: "<test-id@example.com>",
+				accepted: ["recipient@example.com"],
+				rejected: [],
+				responseTime: 42,
+				response: "250 Message accepted",
+			}
+			setTimeout(() => email.setSentResult(result), 0)
+			await expect(email.sentResult).resolves.toEqual(result)
+		})
+
+		it("should reject when setSentError is called", async () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Test Subject",
+				text: "Hello World",
+			})
+
+			const error = new Error("Send failed")
+			setTimeout(() => email.setSentError(error), 0)
+			await expect(email.sentResult).rejects.toBe(error)
+		})
+
+		it("should resolve sent (void) when setSentResult is called", async () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Test Subject",
+				text: "Hello World",
+			})
+
+			const result: SendResult = {
+				messageId: "<test-id@example.com>",
+				accepted: ["recipient@example.com"],
+				rejected: [],
+				responseTime: 10,
+				response: "250 OK",
+			}
+			setTimeout(() => email.setSentResult(result), 0)
+			await expect(email.sent).resolves.toBeUndefined()
+		})
+
+		it("should resolve via setSent() with default SendResult", async () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Test Subject",
+				text: "Hello World",
+			})
+
+			setTimeout(() => email.setSent(), 0)
+			const result = await email.sentResult
+			expect(result.accepted).toEqual([])
+			expect(result.rejected).toEqual([])
+			expect(result.responseTime).toBe(0)
+			expect(result.response).toBe("")
 		})
 	})
 
