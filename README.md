@@ -12,16 +12,22 @@ Built entirely on the [`cloudflare:sockets`](https://developers.cloudflare.com/w
 - 🚀 **Zero dependencies** — runs natively on the Cloudflare Workers runtime
 - 📝 **Full TypeScript support** — every API is fully typed
 - 📧 **Plain text, HTML & attachments** — with automatic MIME type inference
+- 🖼️ **Inline images** — CID-embedded images in HTML emails
+- 📅 **Calendar invites** — iCalendar (.ics) generation with MIME integration
+- 🔏 **DKIM signing** — RSA-SHA256 via Web Crypto API
 - 🔒 **SMTP auth** — `plain`, `login`, and `CRAM-MD5`
+- 🪝 **Send hooks** — `beforeSend` / `afterSend` / lifecycle event hooks
+- 🧪 **Mock mailer** — `MockMailer` for testing with assertion helpers
+- 👁️ **Email preview** — `previewEmail()` for MIME inspection without sending
+- 🏓 **Health check** — `ping()` via SMTP NOOP command
 - ⚡ **Zero-config helpers** — `sendOnce()`, `fromEnv()`, `createFromEnv()` read env vars automatically
-- 🏷️ **Provider presets** — Gmail, Outlook, SendGrid one-liners
+- 🏷️ **Provider presets** — Gmail, Outlook, SendGrid one-liner via `preset()`
 - 📦 **Batch sending** — `sendBatch()` with concurrency control and error handling
 - 🔄 **Connection pool** — `WorkerMailerPool` with round-robin distribution
-- 🧪 **Test helper** — `createTestEmail()` for quick SMTP setup verification
 - ✅ **Email validation** — `validateEmail()` and `validateEmailBatch()`
-- 📬 **DSN (Delivery Status Notification)** — connection-level and per-email overrides
-- 🔁 **Auto-reconnect & retries** — `autoReconnect` and `maxRetries` options
-- 📊 **Structured results** — `SendResult` with `messageId`, `accepted`, `rejected`, `responseTime`
+- 📬 **DSN** — Delivery Status Notification support
+- 🔁 **Auto-reconnect & retries** — configurable retry and reconnection
+- 📊 **Structured results** — `SendResult` with detailed response info
 - 🧹 **Async disposal** — `Symbol.asyncDispose` / `await using` support
 
 ## Requirements
@@ -50,16 +56,16 @@ The fastest way to send an email. Set your `SMTP_*` env vars in `wrangler.toml` 
 import { sendOnce } from "worker-mailer"
 
 export default {
-  async fetch(request, env) {
-    const result = await sendOnce(env, {
-      from: "noreply@example.com",
-      to: "user@example.com",
-      subject: "Welcome!",
-      text: "Thanks for signing up.",
-    })
+	async fetch(request, env) {
+		const result = await sendOnce(env, {
+			from: "noreply@example.com",
+			to: "user@example.com",
+			subject: "Welcome!",
+			text: "Thanks for signing up.",
+		})
 
-    return Response.json(result)
-  },
+		return Response.json(result)
+	},
 }
 ```
 
@@ -68,19 +74,21 @@ export default {
 Pre-configured settings for popular providers. Just supply `SMTP_USER` and `SMTP_PASS`:
 
 ```typescript
-import { WorkerMailer, gmailPreset } from "worker-mailer"
+import { WorkerMailer, preset } from "worker-mailer"
 
-const mailer = await WorkerMailer.connect(gmailPreset(env))
+const mailer = await WorkerMailer.connect(preset("gmail", env))
 
 await mailer.send({
-  from: "you@gmail.com",
-  to: "friend@example.com",
-  subject: "Sent via Gmail",
-  text: "Hello from Cloudflare Workers!",
+	from: "you@gmail.com",
+	to: "friend@example.com",
+	subject: "Sent via Gmail",
+	text: "Hello from Cloudflare Workers!",
 })
 
 await mailer.close()
 ```
+
+Available providers: `"gmail"`, `"outlook"`, `"sendgrid"`.
 
 ### Standard usage
 
@@ -90,34 +98,270 @@ Full control over the connection lifecycle:
 import { WorkerMailer } from "worker-mailer"
 
 const mailer = await WorkerMailer.connect({
-  host: "smtp.example.com",
-  port: 587,
-  secure: false,
-  startTls: true,
-  credentials: {
-    username: "user@example.com",
-    password: "app-password",
-  },
-  authType: "plain",
+	host: "smtp.example.com",
+	port: 587,
+	username: "user@example.com",
+	password: "app-password",
+	authType: ["plain"],
 })
 
 const result = await mailer.send({
-  from: { name: "App", email: "noreply@example.com" },
-  to: [
-    { name: "Alice", email: "alice@example.com" },
-    "bob@example.com",
-  ],
-  subject: "Hello from Worker Mailer",
-  text: "Plain text body",
-  html: "<h1>Hello</h1><p>HTML body</p>",
+	from: { name: "App", email: "noreply@example.com" },
+	to: [
+		{ name: "Alice", email: "alice@example.com" },
+		"bob@example.com",
+	],
+	subject: "Hello from Worker Mailer",
+	text: "Plain text body",
+	html: "<h1>Hello</h1><p>HTML body</p>",
 })
 
-console.log(result.messageId)    // "<...@example.com>"
-console.log(result.accepted)     // ["alice@example.com", "bob@example.com"]
+console.log(result.messageId) // "<...@example.com>"
+console.log(result.accepted) // ["alice@example.com", "bob@example.com"]
 console.log(result.responseTime) // 230  (ms)
 
 await mailer.close()
 ```
+
+> **Note:** Port auto-inference sets TLS mode automatically:
+>
+> - Port 465 → `secure: true, startTls: false` (implicit TLS)
+> - Other ports → `secure: false, startTls: true` (STARTTLS)
+> - Invalid combinations (e.g. port 587 + `secure: true`, port 465 + `startTls: true`) throw immediately.
+
+## Mock Mailer (Testing)
+
+`MockMailer` implements the `Mailer` interface without making any network connections. Use it for unit tests:
+
+```typescript
+import { MockMailer } from "worker-mailer"
+
+const mock = new MockMailer()
+
+await mock.send({
+	from: "test@example.com",
+	to: "user@example.com",
+	subject: "Test",
+	text: "Hello",
+})
+
+console.log(mock.sendCount) // 1
+console.log(mock.lastEmail?.subject) // "Test"
+console.log(mock.hasSentTo("user@example.com")) // true
+console.log(mock.hasSentWithSubject("Test")) // true
+console.log(mock.sentEmails) // ReadonlyArray of all sent emails
+
+mock.clear() // reset state
+```
+
+### Simulating errors and delays
+
+```typescript
+const failingMock = new MockMailer({
+	simulateError: new Error("SMTP connection failed"),
+})
+
+const slowMock = new MockMailer({
+	simulateDelay: 500, // 500ms delay per send
+})
+```
+
+## DKIM Signing
+
+Sign outgoing emails with DKIM (RSA-SHA256 via Web Crypto API):
+
+```typescript
+const mailer = await WorkerMailer.connect({
+	host: "smtp.example.com",
+	port: 587,
+	username: "user@example.com",
+	password: "password",
+	authType: ["plain"],
+	dkim: {
+		domainName: "example.com",
+		keySelector: "mail",
+		privateKey: env.DKIM_PRIVATE_KEY, // PKCS#8 PEM string or CryptoKey
+	},
+})
+```
+
+DKIM can also be configured via environment variables (`SMTP_DKIM_DOMAIN`, `SMTP_DKIM_SELECTOR`, `SMTP_DKIM_PRIVATE_KEY`).
+
+### Full DKIM options
+
+```typescript
+type DkimOptions = {
+	domainName: string
+	keySelector: string
+	privateKey: string | CryptoKey
+	headerFieldNames?: string[] // headers to sign (default: from, to, subject, date, message-id)
+	canonicalization?: "relaxed/relaxed" | "relaxed/simple" | "simple/relaxed" | "simple/simple"
+}
+```
+
+## Inline Images
+
+Embed images directly in HTML emails using CID references:
+
+```typescript
+await mailer.send({
+	from: "sender@example.com",
+	to: "recipient@example.com",
+	subject: "Check out this image",
+	html: '<p>Here is the logo:</p><img src="cid:logo123" />',
+	inlineAttachments: [
+		{
+			cid: "logo123",
+			filename: "logo.png",
+			content: pngUint8Array,
+			mimeType: "image/png",
+		},
+	],
+})
+```
+
+### `InlineAttachment` type
+
+```typescript
+type InlineAttachment = {
+	cid: string // Content-ID referenced in HTML (e.g. "cid:logo123")
+	filename: string
+	content: string | Uint8Array | ArrayBuffer
+	mimeType?: string
+}
+```
+
+## Calendar Invites
+
+Generate iCalendar (.ics) invitations and attach them to emails:
+
+```typescript
+import { createCalendarEvent } from "worker-mailer"
+
+const event = createCalendarEvent({
+	summary: "Team Meeting",
+	start: new Date("2025-02-01T10:00:00Z"),
+	end: new Date("2025-02-01T11:00:00Z"),
+	organizer: { name: "Alice", email: "alice@example.com" },
+	attendees: [
+		{ name: "Bob", email: "bob@example.com", rsvp: true },
+	],
+	location: "Conference Room A",
+	description: "Weekly sync",
+})
+
+await mailer.send({
+	from: "alice@example.com",
+	to: "bob@example.com",
+	subject: "Meeting Invite: Team Meeting",
+	text: "You are invited to a meeting.",
+	calendarEvent: event,
+})
+```
+
+### `CalendarEventOptions` type
+
+```typescript
+type CalendarEventOptions = {
+	summary: string
+	start: Date
+	end: Date
+	organizer: { name?: string; email: string }
+	attendees?: { name?: string; email: string; rsvp?: boolean }[]
+	location?: string
+	description?: string
+	uid?: string
+	reminderMinutes?: number
+	method?: "REQUEST" | "CANCEL" | "REPLY"
+	url?: string
+}
+
+type CalendarEventPart = {
+	content: string
+	method: "REQUEST" | "CANCEL" | "REPLY"
+}
+```
+
+## Send Hooks
+
+Attach lifecycle hooks to intercept and observe email sending:
+
+```typescript
+const mailer = await WorkerMailer.connect({
+	host: "smtp.example.com",
+	port: 587,
+	username: "user@example.com",
+	password: "password",
+	authType: ["plain"],
+	hooks: {
+		beforeSend: async (email) => {
+			// Modify the email before sending
+			return { ...email, subject: `[PREFIX] ${email.subject}` }
+			// Return `false` to skip sending, or `undefined` to send as-is
+		},
+		afterSend: (email, result) => {
+			console.log(`Sent ${result.messageId} to ${result.accepted.join(", ")}`)
+		},
+		onSendError: (email, error) => {
+			console.error(`Failed to send to ${email.to}:`, error.message)
+		},
+		onConnected: (info) => {
+			console.log(`Connected to ${info.host}:${info.port}`)
+		},
+		onDisconnected: (info) => {
+			console.log("Disconnected:", info.reason)
+		},
+		onReconnecting: (info) => {
+			console.log(`Reconnecting (attempt ${info.attempt})...`)
+		},
+		onFatalError: (error) => {
+			console.error("Fatal SMTP error:", error.message)
+		},
+	},
+})
+```
+
+### `SendHooks` type
+
+```typescript
+type SendHooks = {
+	beforeSend?: (email: EmailOptions) => Promise<EmailOptions | false | undefined> | EmailOptions | false | undefined
+	afterSend?: (email: EmailOptions, result: SendResult) => Promise<void> | void
+	onSendError?: (email: EmailOptions, error: Error) => Promise<void> | void
+	onConnected?: (info: { host: string; port: number }) => void
+	onDisconnected?: (info: { reason?: string }) => void
+	onReconnecting?: (info: { attempt: number }) => void
+	onFatalError?: (error: Error) => void
+}
+```
+
+## Email Preview
+
+Render the raw MIME message of an email without sending it. Useful for debugging and testing:
+
+```typescript
+import { previewEmail } from "worker-mailer"
+
+const mime = previewEmail({
+	from: "sender@example.com",
+	to: "recipient@example.com",
+	subject: "Preview this",
+	html: "<h1>Hello</h1>",
+})
+
+console.log(mime) // Full MIME message string
+```
+
+## Health Check (ping)
+
+Check whether the SMTP connection is alive using the SMTP `NOOP` command:
+
+```typescript
+const isAlive = await mailer.ping()
+console.log(isAlive) // true or false
+```
+
+Both `WorkerMailer` and `WorkerMailerPool` support `ping()`.
 
 ## Environment Variables
 
@@ -135,6 +379,9 @@ await mailer.close()
 | `SMTP_EHLO_HOSTNAME` | | Custom EHLO hostname |
 | `SMTP_LOG_LEVEL` | | Log level (`NONE` / `ERROR` / `WARN` / `INFO` / `DEBUG`) |
 | `SMTP_MAX_RETRIES` | | Maximum retry count on transient failures |
+| `SMTP_DKIM_DOMAIN` | | DKIM signing domain |
+| `SMTP_DKIM_SELECTOR` | | DKIM key selector |
+| `SMTP_DKIM_PRIVATE_KEY` | | DKIM private key (PKCS#8 PEM) |
 
 Custom prefix example — `fromEnv(env, "MAIL_")` reads `MAIL_HOST`, `MAIL_PORT`, etc.
 
@@ -151,6 +398,9 @@ send(options: EmailOptions): Promise<SendResult>
 
 // Close the connection
 close(): Promise<void>
+
+// Health check via SMTP NOOP
+ping(): Promise<boolean>
 
 // Async disposal (await using)
 [Symbol.asyncDispose](): Promise<void>
@@ -169,6 +419,9 @@ connect(): Promise<this>
 
 // Send via the next connection (round-robin)
 send(options: EmailOptions): Promise<SendResult>
+
+// Health check — pings all connections
+ping(): Promise<boolean>
 
 // Close all connections
 close(): Promise<void>
@@ -192,41 +445,40 @@ sendOnce(env: Record<string, unknown>, email: EmailOptions, prefix?: string): Pr
 
 ### Provider Presets
 
-Each preset returns a `WorkerMailerOptions` with the provider's host/port/TLS pre-filled.
+Returns a `WorkerMailerOptions` with the provider's host/port/TLS pre-filled.
 Credentials are read from `SMTP_USER` and `SMTP_PASS` in the env object.
 
 ```typescript
-gmailPreset(env: Record<string, unknown>): WorkerMailerOptions
-// → smtp.gmail.com:587, STARTTLS, auth: plain
+preset(provider: SmtpProvider, env: Record<string, unknown>): WorkerMailerOptions
 
-outlookPreset(env: Record<string, unknown>): WorkerMailerOptions
-// → smtp.office365.com:587, STARTTLS, auth: plain
+type SmtpProvider = "gmail" | "outlook" | "sendgrid"
 
-sendgridPreset(env: Record<string, unknown>): WorkerMailerOptions
-// → smtp.sendgrid.net:587, STARTTLS, auth: plain
+// Gmail  → smtp.gmail.com:587, STARTTLS, auth: plain
+// Outlook → smtp.office365.com:587, STARTTLS, auth: plain
+// SendGrid → smtp.sendgrid.net:587, STARTTLS, auth: plain
 ```
 
 ### sendBatch
 
 ```typescript
 sendBatch(
-  mailer: WorkerMailer,
-  emails: EmailOptions[],
-  options?: BatchOptions,
+	mailer: Mailer,
+	emails: EmailOptions[],
+	options?: BatchOptions,
 ): Promise<BatchResult[]>
 ```
 
 ```typescript
 type BatchOptions = {
-  continueOnError?: boolean  // default: true
-  concurrency?: number       // default: 1 (sequential)
+	continueOnError?: boolean // default: true
+	concurrency?: number // default: 1 (sequential)
 }
 
 type BatchResult = {
-  success: boolean
-  email: EmailOptions
-  result?: SendResult
-  error?: Error
+	success: boolean
+	email: EmailOptions
+	result?: SendResult
+	error?: Error
 }
 ```
 
@@ -247,25 +499,37 @@ Full `EmailOptions` type:
 type User = { name?: string; email: string }
 
 type EmailOptions = {
-  from: string | User
-  to: string | string[] | User | User[]
-  reply?: string | User
-  cc?: string | string[] | User | User[]
-  bcc?: string | string[] | User | User[]
-  subject: string
-  text?: string
-  html?: string
-  headers?: Record<string, string>
-  attachments?: {
-    filename: string
-    content: string | Uint8Array | ArrayBuffer
-    mimeType?: string   // e.g. "text/plain", "application/pdf"
-  }[]
-  dsnOverride?: {
-    envelopeId?: string
-    RET?: { HEADERS?: boolean; FULL?: boolean }
-    NOTIFY?: { DELAY?: boolean; FAILURE?: boolean; SUCCESS?: boolean }
-  }
+	from: string | User
+	to: string | string[] | User | User[]
+	reply?: string | User
+	cc?: string | string[] | User | User[]
+	bcc?: string | string[] | User | User[]
+	subject: string
+	text?: string
+	html?: string
+	headers?: Record<string, string>
+	attachments?: Attachment[]
+	inlineAttachments?: InlineAttachment[]
+	calendarEvent?: CalendarEventPart
+	dsnOverride?: DsnOptions
+}
+
+type Attachment = {
+	filename: string
+	content: string | Uint8Array | ArrayBuffer
+	mimeType?: string // e.g. "text/plain", "application/pdf"
+}
+
+type InlineAttachment = {
+	cid: string
+	filename: string
+	content: string | Uint8Array | ArrayBuffer
+	mimeType?: string
+}
+
+type CalendarEventPart = {
+	content: string
+	method: "REQUEST" | "CANCEL" | "REPLY"
 }
 ```
 
@@ -276,17 +540,17 @@ Example with an attachment:
 
 ```typescript
 await mailer.send({
-  from: "sender@example.com",
-  to: "recipient@example.com",
-  subject: "Invoice attached",
-  text: "Please find the invoice attached.",
-  attachments: [
-    {
-      filename: "invoice.pdf",
-      content: base64EncodedString,
-      mimeType: "application/pdf",
-    },
-  ],
+	from: "sender@example.com",
+	to: "recipient@example.com",
+	subject: "Invoice attached",
+	text: "Please find the invoice attached.",
+	attachments: [
+		{
+			filename: "invoice.pdf",
+			content: base64EncodedString,
+			mimeType: "application/pdf",
+		},
+	],
 })
 ```
 
@@ -296,11 +560,11 @@ Every `send()` call returns a `SendResult`:
 
 ```typescript
 type SendResult = {
-  messageId: string    // Message-ID assigned by the server
-  accepted: string[]   // Addresses accepted by the server
-  rejected: string[]   // Addresses rejected by the server
-  responseTime: number // Round-trip time in milliseconds
-  response: string     // Raw SMTP response string
+	messageId: string // Message-ID assigned by the server
+	accepted: string[] // Addresses accepted by the server
+	rejected: string[] // Addresses rejected by the server
+	responseTime: number // Round-trip time in milliseconds
+	response: string // Raw SMTP response string
 }
 ```
 
@@ -312,9 +576,9 @@ type SendResult = {
 import { createTestEmail } from "worker-mailer"
 
 const testEmail = createTestEmail({
-  from: "sender@example.com",
-  to: "recipient@example.com",
-  smtpHost: "smtp.gmail.com", // optional — shown in the email body
+	from: "sender@example.com",
+	to: "recipient@example.com",
+	smtpHost: "smtp.gmail.com", // optional — shown in the email body
 })
 
 await mailer.send(testEmail)
@@ -330,13 +594,15 @@ Set DSN options when connecting. They apply to all emails sent through that conn
 
 ```typescript
 const mailer = await WorkerMailer.connect({
-  host: "smtp.example.com",
-  port: 587,
-  credentials: { username: "user", password: "pass" },
-  dsn: {
-    RET: { FULL: true },
-    NOTIFY: { SUCCESS: true, FAILURE: true },
-  },
+	host: "smtp.example.com",
+	port: 587,
+	username: "user@example.com",
+	password: "password",
+	authType: ["plain"],
+	dsn: {
+		RET: { FULL: true },
+		NOTIFY: { SUCCESS: true, FAILURE: true },
+	},
 })
 ```
 
@@ -346,32 +612,39 @@ Override connection-level DSN for individual emails via `dsnOverride`:
 
 ```typescript
 await mailer.send({
-  from: "sender@example.com",
-  to: "recipient@example.com",
-  subject: "Important",
-  text: "Please confirm receipt.",
-  dsnOverride: {
-    envelopeId: "unique-envelope-id-123",
-    RET: { HEADERS: true },
-    NOTIFY: { SUCCESS: true, FAILURE: true, DELAY: true },
-  },
+	from: "sender@example.com",
+	to: "recipient@example.com",
+	subject: "Important",
+	text: "Please confirm receipt.",
+	dsnOverride: {
+		envelopeId: "unique-envelope-id-123",
+		RET: { HEADERS: true },
+		NOTIFY: { SUCCESS: true, FAILURE: true, DELAY: true },
+	},
 })
 ```
 
 ## Error Handling
 
-### `onError` callback
+### `hooks.onFatalError` callback
 
-Receive connection-level errors without wrapping every call in try/catch:
+Receive connection-level fatal errors (disconnect, reconnection failure, etc.) without wrapping every call in try/catch:
 
 ```typescript
 const mailer = await WorkerMailer.connect({
-  host: "smtp.example.com",
-  port: 587,
-  credentials: { username: "user", password: "pass" },
-  onError: (error) => {
-    console.error("SMTP error:", error.message)
-  },
+	host: "smtp.example.com",
+	port: 587,
+	username: "user@example.com",
+	password: "password",
+	authType: ["plain"],
+	hooks: {
+		onFatalError: (error) => {
+			console.error("SMTP fatal error:", error.message)
+		},
+		onSendError: (email, error) => {
+			console.error(`Send failed for ${email.subject}:`, error.message)
+		},
+	},
 })
 ```
 
@@ -381,10 +654,12 @@ Automatically retry transient failures (default: `3`):
 
 ```typescript
 const mailer = await WorkerMailer.connect({
-  host: "smtp.example.com",
-  port: 587,
-  credentials: { username: "user", password: "pass" },
-  maxRetries: 5,
+	host: "smtp.example.com",
+	port: 587,
+	username: "user@example.com",
+	password: "password",
+	authType: ["plain"],
+	maxRetries: 5,
 })
 ```
 
@@ -394,10 +669,12 @@ Automatically reconnect if the underlying TCP connection is lost (default: `fals
 
 ```typescript
 const mailer = await WorkerMailer.connect({
-  host: "smtp.example.com",
-  port: 587,
-  credentials: { username: "user", password: "pass" },
-  autoReconnect: true,
+	host: "smtp.example.com",
+	port: 587,
+	username: "user@example.com",
+	password: "password",
+	authType: ["plain"],
+	autoReconnect: true,
 })
 ```
 
@@ -409,20 +686,22 @@ const mailer = await WorkerMailer.connect({
 import { WorkerMailerPool } from "worker-mailer"
 
 const pool = new WorkerMailerPool({
-  host: "smtp.example.com",
-  port: 587,
-  credentials: { username: "user", password: "pass" },
-  poolSize: 5,
+	host: "smtp.example.com",
+	port: 587,
+	username: "user@example.com",
+	password: "password",
+	authType: ["plain"],
+	poolSize: 5,
 })
 
 await pool.connect()
 
 // Sends are distributed across 5 connections
 await pool.send({
-  from: "a@example.com",
-  to: "b@example.com",
-  subject: "Hi",
-  text: "Hello",
+	from: "a@example.com",
+	to: "b@example.com",
+	subject: "Hi",
+	text: "Hello",
 })
 
 await pool.close()
@@ -438,22 +717,22 @@ import { WorkerMailer, sendBatch } from "worker-mailer"
 const mailer = await WorkerMailer.connect({ /* ... */ })
 
 const emails = [
-  { from: "noreply@example.com", to: "user1@example.com", subject: "Hello 1", text: "Hi" },
-  { from: "noreply@example.com", to: "user2@example.com", subject: "Hello 2", text: "Hi" },
-  { from: "noreply@example.com", to: "user3@example.com", subject: "Hello 3", text: "Hi" },
+	{ from: "noreply@example.com", to: "user1@example.com", subject: "Hello 1", text: "Hi" },
+	{ from: "noreply@example.com", to: "user2@example.com", subject: "Hello 2", text: "Hi" },
+	{ from: "noreply@example.com", to: "user3@example.com", subject: "Hello 3", text: "Hi" },
 ]
 
 const results = await sendBatch(mailer, emails, {
-  concurrency: 3,        // send up to 3 emails at a time
-  continueOnError: true,  // don't stop on individual failures
+	concurrency: 3, // send up to 3 emails at a time
+	continueOnError: true, // don't stop on individual failures
 })
 
 for (const r of results) {
-  if (r.success) {
-    console.log(`✅ ${r.result!.messageId}`)
-  } else {
-    console.error(`❌ ${r.error!.message}`)
-  }
+	if (r.success) {
+		console.log(`✅ ${r.result!.messageId}`)
+	} else {
+		console.error(`❌ ${r.error!.message}`)
+	}
 }
 
 await mailer.close()
@@ -465,14 +744,14 @@ Both `WorkerMailer` and `WorkerMailerPool` implement `Symbol.asyncDispose`, so y
 
 ```typescript
 {
-  await using mailer = await WorkerMailer.connect({ /* ... */ })
+	await using mailer = await WorkerMailer.connect({ /* ... */ })
 
-  await mailer.send({
-    from: "sender@example.com",
-    to: "recipient@example.com",
-    subject: "Auto-cleanup",
-    text: "Connection is closed automatically when this block exits.",
-  })
+	await mailer.send({
+		from: "sender@example.com",
+		to: "recipient@example.com",
+		subject: "Auto-cleanup",
+		text: "Connection is closed automatically when this block exits.",
+	})
 } // mailer.close() is called automatically here
 ```
 
@@ -482,26 +761,22 @@ Full reference for all connection options:
 
 ```typescript
 type WorkerMailerOptions = {
-  host: string                          // SMTP server hostname
-  port: number                          // SMTP server port (587, 465, etc.)
-  secure?: boolean                      // Use TLS from the start (default: false)
-  startTls?: boolean                    // Upgrade to TLS via STARTTLS (default: true)
-  credentials?: {
-    username: string
-    password: string
-  }
-  authType?: AuthType | AuthType[]      // "plain" | "login" | "cram-md5"
-  logLevel?: LogLevel                   // NONE, ERROR, WARN, INFO, DEBUG
-  dsn?: {
-    RET?: { HEADERS?: boolean; FULL?: boolean }
-    NOTIFY?: { DELAY?: boolean; FAILURE?: boolean; SUCCESS?: boolean }
-  }
-  socketTimeoutMs?: number              // Socket timeout in ms (default: 60000)
-  responseTimeoutMs?: number            // SMTP response timeout in ms (default: 30000)
-  ehloHostname?: string                 // Custom EHLO hostname (default: host)
-  maxRetries?: number                   // Retry count on failure (default: 3)
-  autoReconnect?: boolean               // Auto-reconnect on disconnect (default: false)
-  onError?: (error: Error) => void      // Connection-level error callback
+	host: string // SMTP server hostname
+	port: number // SMTP server port (587, 465, etc.)
+	secure?: boolean // Use TLS from the start (default: false)
+	startTls?: boolean // Upgrade to TLS via STARTTLS (default: true)
+	username?: string // SMTP auth username
+	password?: string // SMTP auth password
+	authType?: AuthType[] // ["plain"] | ["login"] | ["cram-md5"] — always an array
+	logLevel?: LogLevel // NONE, ERROR, WARN, INFO, DEBUG
+	dsn?: Omit<DsnOptions, "envelopeId"> // Connection-level DSN settings
+	socketTimeoutMs?: number // Socket timeout in ms (default: 60000)
+	responseTimeoutMs?: number // SMTP response timeout in ms (default: 30000)
+	ehloHostname?: string // Custom EHLO hostname (default: host)
+	maxRetries?: number // Retry count on failure (default: 3)
+	autoReconnect?: boolean // Auto-reconnect on disconnect (default: false)
+	hooks?: SendHooks // Send & lifecycle hooks
+	dkim?: DkimOptions // DKIM signing configuration
 }
 ```
 
