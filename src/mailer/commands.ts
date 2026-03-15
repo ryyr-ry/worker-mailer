@@ -70,6 +70,16 @@ export async function rset(transport: SmtpTransport): Promise<void> {
 	}
 }
 
+export async function noop(transport: SmtpTransport): Promise<boolean> {
+	try {
+		await transport.writeLine("NOOP")
+		const response = await transport.readTimeout()
+		return response.startsWith("250")
+	} catch {
+		return false
+	}
+}
+
 export function buildNotify(dsnGlobal?: DsnParam, dsnOverride?: DsnOptions): string {
 	const notifications: string[] = []
 	if (dsnOverride?.NOTIFY?.SUCCESS || (!dsnOverride?.NOTIFY && dsnGlobal?.NOTIFY?.SUCCESS)) {

@@ -829,14 +829,14 @@ describe("WorkerMailer", () => {
 				authType: ["plain", "login"],
 			})
 
-			expect(() =>
+			await expect(
 				mailer.send({
 					from: { email: "attacker@evil.com\r\nRCPT TO: <victim@target.com>" },
 					to: [{ email: "legit@example.com" }],
 					subject: "test",
 					text: "test",
 				}),
-			).toThrow(/Invalid email address/)
+			).rejects.toThrow(/Invalid email address/)
 
 			await mailer.close()
 		})
@@ -868,14 +868,14 @@ describe("WorkerMailer", () => {
 				value: new TextEncoder().encode("250 Sender OK\r\n"),
 			})
 
-			expect(() =>
+			await expect(
 				mailer.send({
 					from: { email: "sender@example.com" },
 					to: [{ email: "victim@target.com\r\nDATA" }],
 					subject: "test",
 					text: "test",
 				}),
-			).toThrow(/Invalid email address/)
+			).rejects.toThrow(/Invalid email address/)
 
 			await mailer.close()
 		})
@@ -1066,9 +1066,9 @@ describe("WorkerMailer", () => {
 		})
 	})
 
-	describe("onError callback", () => {
-		it("should call onError when a fatal error propagates from start()", async () => {
-			const onError = vi.fn()
+	describe("onFatalError hook", () => {
+		it("should call onFatalError when a fatal error propagates from start()", async () => {
+			const onFatalError = vi.fn()
 
 			mockReader.read
 				.mockResolvedValueOnce({
@@ -1090,7 +1090,7 @@ describe("WorkerMailer", () => {
 				password: "pass",
 				authType: ["plain"],
 				maxRetries: 0,
-				onError,
+				hooks: { onFatalError },
 			})
 
 			// Send failure: MAIL FROM fails → RSET fails → close() → start() promise rejects
@@ -1112,10 +1112,10 @@ describe("WorkerMailer", () => {
 
 			await expect(sendPromise).rejects.toThrow("[WorkerMailer] MAIL FROM failed")
 
-			// onError is called asynchronously in start()'s catch, so wait a bit
+			// onFatalError is called asynchronously in start()'s catch, so wait a bit
 			await new Promise<void>((resolve) => setTimeout(resolve, 50))
 
-			expect(onError).toHaveBeenCalledWith(
+			expect(onFatalError).toHaveBeenCalledWith(
 				expect.objectContaining({
 					message: expect.stringContaining("[WorkerMailer] RSET failed"),
 				}),

@@ -4,26 +4,26 @@ import { applyDotStuffing } from "../email/mime"
 import type { EmailOptions } from "../email/types"
 import Logger from "../logger"
 import type { SendResult } from "../result"
-import { BlockingQueue } from "../utils"
+import { BlockingQueue, backoff } from "../utils"
 import { authenticate } from "./auth"
-import { dataCommand, mailFrom, rcptTo, rset, sendBody } from "./commands"
+import { dataCommand, mailFrom, noop, rcptTo, rset, sendBody } from "./commands"
 import { inferSecurity, validatePortSecurity } from "./config"
 import { ehlo, greet, startTls } from "./handshake"
 import { SmtpTransport } from "./transport"
-import type { AuthType, Credentials, SmtpCapabilities, WorkerMailerOptions } from "./types"
+import {
+	type AuthType,
+	type Credentials,
+	emptyCapabilities,
+	type Mailer,
+	SendCancelledError,
+	type SendHooks,
+	type SmtpCapabilities,
+	type WorkerMailerOptions,
+} from "./types"
 
-function backoff(attempt: number): Promise<void> {
-	return new Promise<void>((r) => setTimeout(r, Math.min(1000 * 2 ** attempt, 30_000)))
-}
-
-export class WorkerMailer {
+export class WorkerMailer implements Mailer {
 	private transport: SmtpTransport
-	private capabilities: SmtpCapabilities = {
-		supportsDSN: false,
-		allowAuth: false,
-		authTypeSupported: [],
-		supportsStartTls: false,
-	}
+	private capabilities: SmtpCapabilities = emptyCapabilities
 	private readonly host: string
 	private readonly port: number
 	private readonly secure: boolean
@@ -35,7 +35,7 @@ export class WorkerMailer {
 	private readonly ehloHostname: string
 	private readonly maxRetries: number
 	private readonly autoReconnect: boolean
-	private readonly onError?: (error: Error) => void
+	private readonly hooks?: SendHooks
 	private readonly logger: Logger
 	private readonly dsn: WorkerMailerOptions["dsn"]
 	private active = false
@@ -60,7 +60,7 @@ export class WorkerMailer {
 		this.ehloHostname = options.ehloHostname || this.host
 		this.maxRetries = options.maxRetries ?? 3
 		this.autoReconnect = options.autoReconnect ?? false
-		this.onError = options.onError
+		this.hooks = options.hooks
 		this.logger = new Logger(options.logLevel, `[WorkerMailer:${this.host}:${this.port}]`)
 		this.transport = this.createTransport()
 	}
@@ -68,25 +68,29 @@ export class WorkerMailer {
 	static async connect(options: WorkerMailerOptions): Promise<WorkerMailer> {
 		const mailer = new WorkerMailer(options)
 		await mailer.initializeSmtpSession()
+		mailer.hooks?.onConnected?.({ host: mailer.host, port: mailer.port })
 		mailer.start().catch((error: unknown) => {
 			const normalizedError = error instanceof Error ? error : new Error(String(error))
-			if (mailer.onError) {
-				mailer.onError(normalizedError)
-			} else {
-				console.error(normalizedError)
-			}
+			mailer.reportFatalError(normalizedError)
 		})
 		return mailer
 	}
-	public send(options: EmailOptions): Promise<SendResult> {
+	public async send(options: EmailOptions): Promise<SendResult> {
 		if (this.emailToBeSent.closed) {
-			return Promise.reject(new Error("[WorkerMailer] Send failed: mailer is closed"))
+			throw new Error("[WorkerMailer] Send failed: mailer is closed")
 		}
-		const email = new Email(options)
+		let emailOptions = options
+		if (this.hooks?.beforeSend) {
+			const hookResult = await this.hooks.beforeSend(options)
+			if (hookResult === false) throw new SendCancelledError()
+			if (hookResult && typeof hookResult === "object") {
+				emailOptions = hookResult
+			}
+		}
+		const email = new Email(emailOptions)
 		this.emailToBeSent.enqueue(email)
 		return email.sentResult
 	}
-
 	private async initializeSmtpSession(): Promise<void> {
 		this.logger.info("[WorkerMailer] Connecting to SMTP server")
 		await this.transport.waitForOpen(this.socketTimeoutMs)
@@ -112,13 +116,11 @@ export class WorkerMailer {
 	}
 	private async start(): Promise<void> {
 		while (this.active) {
-			let email: Email
 			try {
-				email = await this.emailToBeSent.dequeue()
-			} catch (_: unknown) {
+				this.emailSending = await this.emailToBeSent.dequeue()
+			} catch {
 				break
 			}
-			this.emailSending = email
 			await this.processEmailWithRetry()
 			this.emailSending = null
 		}
@@ -134,12 +136,15 @@ export class WorkerMailer {
 			}
 		}
 		if (this.active && this.emailSending) {
-			this.emailSending.setSentError(
-				new Error(`[WorkerMailer] Send failed: max retries (${this.maxRetries}) exceeded`),
+			const error = new Error(
+				`[WorkerMailer] Send failed: max retries (${this.maxRetries}) exceeded`,
 			)
+			this.emailSending.setSentError(error)
+			try {
+				await this.hooks?.onSendError?.(this.emailSending.options, error)
+			} catch {}
 		}
 	}
-
 	private async executeSend(): Promise<void> {
 		if (!this.emailSending) return
 		const startTime = Date.now()
@@ -150,13 +155,17 @@ export class WorkerMailer {
 		await dataCommand(this.transport)
 		const smtpData = `${applyDotStuffing(email.getRawMessage())}\r\n.\r\n`
 		const bodyResponse = await sendBody(this.transport, smtpData)
-		email.setSentResult({
+		const result: SendResult = {
 			messageId: email.headers["Message-ID"] ?? "",
 			accepted: allRecipients.map((u) => u.email),
 			rejected: [],
 			responseTime: Date.now() - startTime,
 			response: bodyResponse.trim(),
-		})
+		}
+		email.setSentResult(result)
+		try {
+			await this.hooks?.afterSend?.(email.options, result)
+		} catch {}
 	}
 	private async handleSendFailure(e: unknown, attempt: number): Promise<boolean> {
 		if (!this.emailSending) return true
@@ -183,9 +192,7 @@ export class WorkerMailer {
 				return true
 			}
 		}
-		if (attempt < this.maxRetries) {
-			await backoff(attempt)
-		}
+		if (attempt < this.maxRetries) await backoff(attempt)
 		return false
 	}
 	private createTransport(): SmtpTransport {
@@ -196,20 +203,15 @@ export class WorkerMailer {
 		)
 		return new SmtpTransport(socket, this.logger, this.responseTimeoutMs)
 	}
-
 	private async tryReconnect(): Promise<boolean> {
 		const maxAttempts = 3
 		for (let i = 0; i < maxAttempts; i++) {
 			try {
 				this.logger.info(`[WorkerMailer] Reconnecting (attempt ${i + 1}/${maxAttempts})`)
+				this.hooks?.onReconnecting?.({ attempt: i + 1 })
 				this.transport.safeClose()
 				this.transport = this.createTransport()
-				this.capabilities = {
-					supportsDSN: false,
-					allowAuth: false,
-					authTypeSupported: [],
-					supportsStartTls: false,
-				}
+				this.capabilities = emptyCapabilities
 				await this.initializeSmtpSession()
 				this.logger.info("[WorkerMailer] Reconnection successful")
 				return true
@@ -224,27 +226,24 @@ export class WorkerMailer {
 	public async close(error?: Error): Promise<void> {
 		this.active = false
 		this.logger.info("[WorkerMailer] Closing connection", error?.message || "")
-		const shutdownError = error || new Error("[WorkerMailer] Mailer is shutting down")
-		this.emailSending?.setSentError?.(shutdownError)
-		while (this.emailToBeSent.length > 0) {
-			const email = await this.emailToBeSent.dequeue()
-			email.setSentError(shutdownError)
-		}
+		const err = error || new Error("[WorkerMailer] Mailer is shutting down")
+		this.emailSending?.setSentError?.(err)
+		while (this.emailToBeSent.length > 0) (await this.emailToBeSent.dequeue()).setSentError(err)
 		this.emailToBeSent.close()
 		try {
 			await this.transport.quit()
-		} catch (_) {
-			/* Socket may already be closed */
-		}
+		} catch {}
+		this.hooks?.onDisconnected?.({ reason: error?.message })
 	}
 	async [Symbol.asyncDispose](): Promise<void> {
 		await this.close()
 	}
+	async ping(): Promise<boolean> {
+		if (!this.active || !this.transport) return false
+		return noop(this.transport)
+	}
 	private reportFatalError(error: Error): void {
-		if (this.onError) {
-			this.onError(error)
-		} else {
-			console.error(error)
-		}
+		if (this.hooks?.onFatalError) this.hooks.onFatalError(error)
+		else console.error(error)
 	}
 }

@@ -1,5 +1,5 @@
 import type { EmailOptions } from "./email/types"
-import type { WorkerMailer } from "./mailer"
+import type { Mailer } from "./mailer"
 import type { SendResult } from "./result"
 
 export type BatchResult = {
@@ -15,7 +15,7 @@ export type BatchOptions = {
 }
 
 export async function sendBatch(
-	mailer: WorkerMailer,
+	mailer: Mailer,
 	emails: EmailOptions[],
 	options?: BatchOptions,
 ): Promise<BatchResult[]> {
@@ -30,7 +30,7 @@ export async function sendBatch(
 }
 
 async function sendSequential(
-	mailer: WorkerMailer,
+	mailer: Mailer,
 	emails: EmailOptions[],
 	continueOnError: boolean,
 ): Promise<BatchResult[]> {
@@ -53,7 +53,7 @@ async function sendSequential(
 }
 
 async function sendConcurrent(
-	mailer: WorkerMailer,
+	mailer: Mailer,
 	emails: EmailOptions[],
 	concurrency: number,
 	continueOnError: boolean,
