@@ -36,6 +36,8 @@ export type WorkerMailerOptions = {
 	socketTimeoutMs?: number
 	responseTimeoutMs?: number
 	ehloHostname?: string
+	maxRetries?: number
+	onError?: (error: Error) => void
 }
 
 export class WorkerMailer {
@@ -51,6 +53,8 @@ export class WorkerMailer {
 	private readonly socketTimeoutMs: number
 	private readonly responseTimeoutMs: number
 	private readonly ehloHostname: string
+	private readonly maxRetries: number
+	private readonly onError?: (error: Error) => void
 
 	private reader: ReadableStreamDefaultReader<Uint8Array>
 	private writer: WritableStreamDefaultWriter<Uint8Array>
@@ -105,6 +109,8 @@ export class WorkerMailer {
 		this.socketTimeoutMs = options.socketTimeoutMs || 60_000
 		this.responseTimeoutMs = options.responseTimeoutMs || 30_000
 		this.ehloHostname = options.ehloHostname || this.host
+		this.maxRetries = options.maxRetries ?? 3
+		this.onError = options.onError
 		this.socket = connect(
 			{
 				hostname: this.host,
@@ -124,11 +130,21 @@ export class WorkerMailer {
 	static async connect(options: WorkerMailerOptions): Promise<WorkerMailer> {
 		const mailer = new WorkerMailer(options)
 		await mailer.initializeSmtpSession()
-		mailer.start().catch(console.error)
+		mailer.start().catch((error: unknown) => {
+			const normalizedError = error instanceof Error ? error : new Error(String(error))
+			if (mailer.onError) {
+				mailer.onError(normalizedError)
+			} else {
+				console.error(normalizedError)
+			}
+		})
 		return mailer
 	}
 
 	public send(options: EmailOptions): Promise<void> {
+		if (this.emailToBeSent.closed) {
+			return Promise.reject(new Error("[WorkerMailer] Send failed: mailer is closed"))
+		}
 		const email = new Email(options)
 		this.emailToBeSent.enqueue(email)
 		return email.sent
@@ -144,7 +160,7 @@ export class WorkerMailer {
 		return execTimeout(
 			this.read(),
 			this.responseTimeoutMs,
-			new Error("Timeout while waiting for smtp server response"),
+			new Error("[WorkerMailer] Connection timeout: waiting for SMTP server response"),
 		)
 	}
 
@@ -153,7 +169,9 @@ export class WorkerMailer {
 		while (true) {
 			const { value, done } = await this.reader.read()
 			if (done) {
-				throw new Error("SMTP server closed the connection unexpectedly")
+				throw new Error(
+					"[WorkerMailer] Connection closed: SMTP server closed the connection unexpectedly",
+				)
 			}
 			if (!value) {
 				continue
@@ -175,7 +193,7 @@ export class WorkerMailer {
 
 	private async writeLine(line: string) {
 		if (/[\r\n]/.test(line)) {
-			throw new Error("CRLF injection detected in SMTP command")
+			throw new Error("[WorkerMailer] Security error: CRLF injection detected in SMTP command")
 		}
 		await this.write(`${line}\r\n`)
 	}
@@ -203,27 +221,55 @@ export class WorkerMailer {
 
 	private async start() {
 		while (this.active) {
-			this.emailSending = await this.emailToBeSent.dequeue()
+			let email: Email
 			try {
-				await this.mail()
-				await this.rcpt()
-				await this.data()
-				await this.body()
-				this.emailSending?.setSent()
-			} catch (e: unknown) {
-				const message = e instanceof Error ? e.message : String(e)
-				this.logger.error(`Failed to send email: ${message}`)
-				if (!this.active) {
-					return
-				}
-				this.emailSending.setSentError(e)
+				email = await this.emailToBeSent.dequeue()
+			} catch (_: unknown) {
+				break
+			}
+			this.emailSending = email
+			let sent = false
+			for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
 				try {
-					await this.rset()
+					await this.mail()
+					await this.rcpt()
+					await this.data()
+					await this.body()
+					this.emailSending.setSent()
+					sent = true
+					break
 				} catch (e: unknown) {
-					await this.close(e instanceof Error ? e : new Error(String(e)))
+					const message = e instanceof Error ? e.message : String(e)
+					this.logger.error(
+						`[WorkerMailer] Send failed: ${message} (attempt ${attempt + 1}/${this.maxRetries + 1})`,
+					)
+					if (!this.active) {
+						this.emailSending.setSentError(e)
+						return
+					}
+					try {
+						await this.rset()
+					} catch (rsetError: unknown) {
+						if (attempt >= this.maxRetries) {
+							this.emailSending.setSentError(e)
+							const fatalError =
+								rsetError instanceof Error ? rsetError : new Error(String(rsetError))
+							await this.close(fatalError)
+							this.reportFatalError(fatalError)
+							return
+						}
+						// RSET 失敗でもリトライ回数が残っていれば指数バックオフ後に再試行
+					}
+					if (attempt < this.maxRetries) {
+						const delayMs = Math.min(1000 * 2 ** attempt, 30_000)
+						await new Promise<void>((resolve) => setTimeout(resolve, delayMs))
+					}
 				}
-				// If reset successfully, try to send next email
-				// otherwise `this.active` will be set to false in `close` function, and loop will be stopped
+			}
+			if (!sent && this.active) {
+				this.emailSending.setSentError(
+					new Error(`[WorkerMailer] Send failed: max retries (${this.maxRetries}) exceeded`),
+				)
 			}
 			this.emailSending = null
 		}
@@ -231,33 +277,44 @@ export class WorkerMailer {
 
 	public async close(error?: Error) {
 		this.active = false
-		this.logger.info("WorkerMailer is closed", error?.message || "")
-		this.emailSending?.setSentError?.(error || new Error("WorkerMailer is shutting down"))
-		while (this.emailToBeSent.length) {
-			const email = await this.emailToBeSent.dequeue()
-			email.setSentError(error || new Error("WorkerMailer is shutting down"))
-		}
+		this.logger.info("[WorkerMailer] Closing connection", error?.message || "")
+		this.emailSending?.setSentError?.(error || new Error("[WorkerMailer] Mailer is shutting down"))
+
+		this.emailToBeSent.close()
 
 		try {
 			await this.writeLine("QUIT")
 			await this.readTimeout()
-			this.socket.close().catch(() => this.logger.error("Failed to close socket")) // If server-side close socket first it will never be solved, so just fire and forget
+			this.socket.close().catch(() => this.logger.error("[WorkerMailer] Failed to close socket"))
 		} catch (_ignore) {
-			// maybe socket is closed now
-			// anyway, just keep it simple
+			// ソケットが既に閉じている可能性
+		}
+	}
+
+	private reportFatalError(error: Error): void {
+		if (this.onError) {
+			this.onError(error)
+		} else {
+			console.error(error)
 		}
 	}
 
 	private async waitForSocketConnected() {
-		this.logger.info(`Connecting to SMTP server`)
-		await execTimeout(this.socket.opened, this.socketTimeoutMs, new Error("Socket timeout!"))
-		this.logger.info("SMTP server connected")
+		this.logger.info("[WorkerMailer] Connecting to SMTP server")
+		await execTimeout(
+			this.socket.opened,
+			this.socketTimeoutMs,
+			new Error("[WorkerMailer] Connection timeout: socket connection timed out"),
+		)
+		this.logger.info("[WorkerMailer] SMTP server connected")
 	}
 
 	private async greet() {
 		const response = await this.readTimeout()
 		if (!response.startsWith("220")) {
-			throw new Error(`Failed to connect to SMTP server: ${response}`)
+			throw new Error(
+				`[WorkerMailer] Connection failed: unexpected greeting from SMTP server: ${response}`,
+			)
 		}
 	}
 
@@ -265,10 +322,9 @@ export class WorkerMailer {
 		await this.writeLine(`EHLO ${this.ehloHostname}`)
 		const response = await this.readTimeout()
 		if (response.startsWith("421")) {
-			throw new Error(`Failed to EHLO. ${response}`)
+			throw new Error(`[WorkerMailer] EHLO failed: ${response}`)
 		}
 		if (!response.startsWith("2")) {
-			// falling back to HELO
 			await this.helo()
 			return
 		}
@@ -281,14 +337,14 @@ export class WorkerMailer {
 		if (response.startsWith("2")) {
 			return
 		}
-		throw new Error(`Failed to HELO. ${response}`)
+		throw new Error(`[WorkerMailer] HELO failed: ${response}`)
 	}
 
 	private async tls() {
 		await this.writeLine("STARTTLS")
 		const response = await this.readTimeout()
 		if (!response.startsWith("220")) {
-			throw new Error(`Failed to start TLS: ${response}`)
+			throw new Error(`[WorkerMailer] STARTTLS failed: ${response}`)
 		}
 
 		// Upgrade the socket to TLS
@@ -325,7 +381,7 @@ export class WorkerMailer {
 			return
 		}
 		if (!this.credentials) {
-			throw new Error("smtp server requires authentication, but no credentials found")
+			throw new Error("[WorkerMailer] Authentication required but no credentials provided")
 		}
 		if (this.authTypeSupported.includes("plain") && this.authType.includes("plain")) {
 			await this.authWithPlain()
@@ -334,7 +390,7 @@ export class WorkerMailer {
 		} else if (this.authTypeSupported.includes("cram-md5") && this.authType.includes("cram-md5")) {
 			await this.authWithCramMD5()
 		} else {
-			throw new Error("No supported auth method found.")
+			throw new Error("[WorkerMailer] No supported authentication method found")
 		}
 	}
 
@@ -345,7 +401,7 @@ export class WorkerMailer {
 		await this.writeLine(`AUTH PLAIN ${userPassBase64}`)
 		const authResult = await this.readTimeout()
 		if (!authResult.startsWith("2")) {
-			throw new Error(`Failed to plain authentication: ${authResult}`)
+			throw new Error(`[WorkerMailer] PLAIN authentication failed: ${authResult}`)
 		}
 	}
 
@@ -353,21 +409,21 @@ export class WorkerMailer {
 		await this.writeLine(`AUTH LOGIN`)
 		const startLoginResponse = await this.readTimeout()
 		if (!startLoginResponse.startsWith("3")) {
-			throw new Error(`Invalid login: ${startLoginResponse}`)
+			throw new Error(`[WorkerMailer] LOGIN authentication failed: ${startLoginResponse}`)
 		}
 
 		const usernameBase64 = toBase64(this.credentials?.username ?? "")
 		await this.writeLine(usernameBase64)
 		const userResponse = await this.readTimeout()
 		if (!userResponse.startsWith("3")) {
-			throw new Error(`Failed to login authentication: ${userResponse}`)
+			throw new Error(`[WorkerMailer] LOGIN authentication failed: ${userResponse}`)
 		}
 
 		const passwordBase64 = toBase64(this.credentials?.password ?? "")
 		await this.writeLine(passwordBase64)
 		const authResult = await this.readTimeout()
 		if (!authResult.startsWith("2")) {
-			throw new Error(`Failed to login authentication: ${authResult}`)
+			throw new Error(`[WorkerMailer] LOGIN authentication failed: ${authResult}`)
 		}
 	}
 
@@ -382,7 +438,9 @@ export class WorkerMailer {
 			.match(/^334\s+(.+)$/)
 			?.pop()
 		if (!challengeWithBase64Encoded) {
-			throw new Error(`Invalid CRAM-MD5 challenge: ${challengeResponse}`)
+			throw new Error(
+				`[WorkerMailer] CRAM-MD5 authentication failed: invalid challenge: ${challengeResponse}`,
+			)
 		}
 
 		// solve challenge
@@ -410,7 +468,7 @@ export class WorkerMailer {
 		await this.writeLine(toBase64(`${this.credentials?.username} ${challengeSolved}`))
 		const authResult = await this.readTimeout()
 		if (!authResult.startsWith("2")) {
-			throw new Error(`Failed to cram-md5 authentication: ${authResult}`)
+			throw new Error(`[WorkerMailer] CRAM-MD5 authentication failed: ${authResult}`)
 		}
 	}
 
@@ -426,7 +484,7 @@ export class WorkerMailer {
 		await this.writeLine(message)
 		const response = await this.readTimeout()
 		if (!response.startsWith("2")) {
-			throw new Error(`Invalid ${message} ${response}`)
+			throw new Error(`[WorkerMailer] MAIL FROM failed: ${message} ${response}`)
 		}
 	}
 
@@ -445,7 +503,7 @@ export class WorkerMailer {
 			await this.writeLine(message)
 			const rcptResponse = await this.readTimeout()
 			if (!rcptResponse.startsWith("2")) {
-				throw new Error(`Invalid ${message} ${rcptResponse}`)
+				throw new Error(`[WorkerMailer] RCPT TO failed: ${message} ${rcptResponse}`)
 			}
 		}
 	}
@@ -454,7 +512,7 @@ export class WorkerMailer {
 		await this.writeLine("DATA")
 		const response = await this.readTimeout()
 		if (!response.startsWith("3")) {
-			throw new Error(`Failed to send DATA: ${response}`)
+			throw new Error(`[WorkerMailer] DATA command failed: ${response}`)
 		}
 	}
 
@@ -462,7 +520,7 @@ export class WorkerMailer {
 		await this.write(this.emailSending?.getEmailData())
 		const response = await this.readTimeout()
 		if (!response.startsWith("2")) {
-			throw new Error(`Failed send email body: ${response}`)
+			throw new Error(`[WorkerMailer] Send body failed: ${response}`)
 		}
 	}
 
@@ -470,7 +528,7 @@ export class WorkerMailer {
 		await this.writeLine("RSET")
 		const response = await this.readTimeout()
 		if (!response.startsWith("2")) {
-			throw new Error(`Failed to reset: ${response}`)
+			throw new Error(`[WorkerMailer] RSET failed: ${response}`)
 		}
 	}
 

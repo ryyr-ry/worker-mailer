@@ -186,7 +186,7 @@ describe("WorkerMailer", () => {
 					port: 587,
 					socketTimeoutMs: 100,
 				}),
-			).rejects.toThrow("Socket timeout!")
+			).rejects.toThrow("[WorkerMailer] Connection timeout: socket connection timed out")
 		})
 
 		it("should use responseTimeoutMs independently from socketTimeoutMs", async () => {
@@ -408,7 +408,7 @@ describe("WorkerMailer", () => {
 					},
 					authType: ["plain"],
 				}),
-			).rejects.toThrow("Failed to plain authentication")
+			).rejects.toThrow("[WorkerMailer] PLAIN authentication failed")
 		})
 	})
 
@@ -742,6 +742,7 @@ describe("WorkerMailer", () => {
 					password: "password",
 				},
 				authType: ["plain"],
+				maxRetries: 0,
 			})
 
 			const sendPromise = mailer.send({
@@ -751,7 +752,7 @@ describe("WorkerMailer", () => {
 				text: "Hello World",
 			})
 
-			await expect(sendPromise).rejects.toThrow("Invalid RCPT TO")
+			await expect(sendPromise).rejects.toThrow("[WorkerMailer] RCPT TO failed")
 		})
 	})
 
@@ -810,6 +811,7 @@ describe("WorkerMailer", () => {
 				port: 587,
 				credentials: { username: "user", password: "pass" },
 				authType: ["plain", "login"],
+				maxRetries: 0,
 			})
 
 			// Simulate server closing connection (done: true)
@@ -822,7 +824,7 @@ describe("WorkerMailer", () => {
 					subject: "test",
 					text: "test",
 				}),
-			).rejects.toThrow(/closed the connection/)
+			).rejects.toThrow(/Connection closed/)
 
 			await mailer.close()
 		})
@@ -917,6 +919,7 @@ describe("WorkerMailer", () => {
 				port: 587,
 				credentials: { username: "user", password: "pass" },
 				authType: ["plain", "login"],
+				maxRetries: 0,
 			})
 
 			await expect(
@@ -927,7 +930,7 @@ describe("WorkerMailer", () => {
 					text: "test",
 					dsnOverride: { envelopeId: "id\r\nRCPT TO: <victim@evil.com>" },
 				}),
-			).rejects.toThrow(/CRLF/)
+			).rejects.toThrow(/CRLF injection/)
 
 			await mailer.close()
 		})
@@ -961,6 +964,214 @@ describe("WorkerMailer", () => {
 			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("CRAM-MD5"))
 
 			warnSpy.mockRestore()
+		})
+	})
+
+	describe("retry", () => {
+		it("should allow maxRetries option to be set", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+				maxRetries: 5,
+			})
+
+			expect((mailer as unknown as { maxRetries: number }).maxRetries).toBe(5)
+
+			await mailer.close()
+		})
+
+		it("should default maxRetries to 3", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+			})
+
+			expect((mailer as unknown as { maxRetries: number }).maxRetries).toBe(3)
+
+			await mailer.close()
+		})
+
+		it("should retry and succeed on second attempt", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				// 1st attempt: MAIL FROM OK, RCPT TO fails
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Sender OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("451 Temporary failure\r\n"),
+				})
+				// RSET OK
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 OK\r\n"),
+				})
+				// 2nd attempt: all OK
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Sender OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Recipient OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("354 Start mail input\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Message accepted\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+				maxRetries: 1,
+			})
+
+			await mailer.send({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Retry Test",
+				text: "Hello",
+			})
+
+			await mailer.close()
+		})
+	})
+
+	describe("onError callback", () => {
+		it("should call onError when a fatal error propagates from start()", async () => {
+			const onError = vi.fn()
+
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+				maxRetries: 0,
+				onError,
+			})
+
+			// 送信失敗: MAIL FROM fails → RSET fails → close() → start() promise rejects
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("451 Temporary failure\r\n"),
+				})
+				// RSET also fails
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("500 RSET failed\r\n"),
+				})
+
+			const sendPromise = mailer.send({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Test",
+				text: "Hello",
+			})
+
+			await expect(sendPromise).rejects.toThrow("[WorkerMailer] MAIL FROM failed")
+
+			// onError は start() の catch で非同期に呼ばれるので少し待つ
+			await new Promise<void>((resolve) => setTimeout(resolve, 50))
+
+			expect(onError).toHaveBeenCalledWith(
+				expect.objectContaining({
+					message: expect.stringContaining("[WorkerMailer] RSET failed"),
+				}),
+			)
+		})
+	})
+
+	describe("close race condition", () => {
+		it("should reject send() after close() is called", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+			})
+
+			await mailer.close()
+
+			await expect(
+				mailer.send({
+					from: "sender@example.com",
+					to: "recipient@example.com",
+					subject: "Test",
+					text: "After close",
+				}),
+			).rejects.toThrow("[WorkerMailer] Send failed: mailer is closed")
 		})
 	})
 })
