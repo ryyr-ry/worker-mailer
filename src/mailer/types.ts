@@ -19,7 +19,7 @@ export interface Mailer {
 export type SendHooks = {
 	beforeSend?: (
 		email: EmailOptions,
-	) => Promise<EmailOptions | false | void> | EmailOptions | false | void
+	) => Promise<EmailOptions | false | undefined> | EmailOptions | false | undefined
 	afterSend?: (email: EmailOptions, result: SendResult) => Promise<void> | void
 	onSendError?: (email: EmailOptions, error: Error) => Promise<void> | void
 	onConnected?: (info: { host: string; port: number }) => void
