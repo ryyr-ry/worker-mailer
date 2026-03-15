@@ -123,6 +123,21 @@ export class Email {
 		this.attachments = options.attachments
 		this.dsnOverride = options.dsnOverride
 		this.headers = options.headers || {}
+
+		this.validateNoCRLF()
+	}
+
+	private static readonly CRLF_PATTERN = /[\r\n]/
+
+	private validateNoCRLF() {
+		if (Email.CRLF_PATTERN.test(this.subject)) {
+			throw new Error("CRLF injection detected in subject")
+		}
+		for (const [key, value] of Object.entries(this.headers)) {
+			if (Email.CRLF_PATTERN.test(key) || Email.CRLF_PATTERN.test(value)) {
+				throw new Error(`CRLF injection detected in header: ${key}`)
+			}
+		}
 	}
 
 	private static toUsers(user: string | string[] | User | User[] | undefined): User[] | undefined {

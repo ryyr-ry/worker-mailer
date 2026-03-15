@@ -386,6 +386,64 @@ describe("Email", () => {
 			await expect(email.sent).rejects.toBe(error)
 		})
 	})
+
+	describe("security", () => {
+		it("should reject CRLF in custom header values (header injection)", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "recipient@example.com",
+						subject: "test",
+						text: "test",
+						headers: {
+							"X-Custom": "value\r\nBCC: attacker@evil.com",
+						},
+					}),
+			).toThrow(/CRLF/)
+		})
+
+		it("should reject CRLF in custom header keys", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "recipient@example.com",
+						subject: "test",
+						text: "test",
+						headers: {
+							"X-Custom\r\nBCC": "attacker@evil.com",
+						},
+					}),
+			).toThrow(/CRLF/)
+		})
+
+		it("should reject CRLF in subject", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "recipient@example.com",
+						subject: "test\r\nBCC: attacker@evil.com",
+						text: "test",
+					}),
+			).toThrow(/CRLF/)
+		})
+
+		it("should allow normal headers without CRLF", () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Normal subject",
+				text: "test",
+				headers: {
+					"X-Custom": "normal-value",
+					"X-Priority": "1",
+				},
+			})
+			expect(email.headers["X-Custom"]).toBe("normal-value")
+		})
+	})
 })
 
 describe("encodeHeader", () => {
