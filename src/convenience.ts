@@ -132,15 +132,3 @@ export function preset(provider: SmtpProvider, env: Record<string, unknown>): Wo
 	}
 	return options
 }
-
-export function gmailPreset(env: Record<string, unknown>): WorkerMailerOptions {
-	return preset("gmail", env)
-}
-
-export function outlookPreset(env: Record<string, unknown>): WorkerMailerOptions {
-	return preset("outlook", env)
-}
-
-export function sendgridPreset(env: Record<string, unknown>): WorkerMailerOptions {
-	return preset("sendgrid", env)
-}

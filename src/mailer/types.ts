@@ -1,3 +1,4 @@
+import type { DsnOptions } from "../email/types"
 import type { LogLevel } from "../logger"
 
 export type AuthType = "plain" | "login" | "cram-md5"
@@ -16,7 +17,7 @@ export type WorkerMailerOptions = {
 	password?: string
 	authType?: AuthType[]
 	logLevel?: LogLevel
-	dsn?: Omit<import("../email/types").DsnOptions, "envelopeId">
+	dsn?: Omit<DsnOptions, "envelopeId">
 	socketTimeoutMs?: number
 	responseTimeoutMs?: number
 	ehloHostname?: string

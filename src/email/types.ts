@@ -15,7 +15,7 @@ export type InlineAttachment = {
 
 export type CalendarEventPart = {
 	content: string
-	method?: string
+	method?: "REQUEST" | "CANCEL" | "REPLY"
 }
 
 export type DsnOptions = {

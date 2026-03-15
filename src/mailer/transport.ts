@@ -81,19 +81,19 @@ export class SmtpTransport {
 		try {
 			this.reader.releaseLock()
 		} catch (_) {
-			/* すでにリリース済みの場合 */
+			/* already released */
 		}
 		try {
 			this.writer.releaseLock()
 		} catch (_) {
-			/* すでにリリース済みの場合 */
+			/* already released */
 		}
 		try {
 			this.socket
 				.close()
 				.catch(() => this.logger.error("[WorkerMailer] Failed to close socket during reconnect"))
 		} catch (_) {
-			/* ソケットが既に閉じている場合 */
+			/* socket already closed */
 		}
 	}
 

@@ -1,13 +1,6 @@
 import { connect } from "cloudflare:sockets"
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
-import {
-	createFromEnv,
-	fromEnv,
-	gmailPreset,
-	outlookPreset,
-	sendgridPreset,
-	sendOnce,
-} from "../../src/convenience"
+import { createFromEnv, fromEnv, preset, sendOnce } from "../../src/convenience"
 
 vi.mock("cloudflare:sockets", () => ({
 	connect: vi.fn(),
@@ -127,8 +120,8 @@ describe("convenience", () => {
 			SMTP_PASS: "app-password",
 		}
 
-		it("should return correct settings for gmailPreset", () => {
-			const options = gmailPreset(env)
+		it("should return correct settings for gmail preset", () => {
+			const options = preset("gmail", env)
 			expect(options.host).toBe("smtp.gmail.com")
 			expect(options.port).toBe(587)
 			expect(options.secure).toBe(false)
@@ -138,8 +131,8 @@ describe("convenience", () => {
 			expect(options.password).toBe("app-password")
 		})
 
-		it("should return correct settings for outlookPreset", () => {
-			const options = outlookPreset(env)
+		it("should return correct settings for outlook preset", () => {
+			const options = preset("outlook", env)
 			expect(options.host).toBe("smtp.office365.com")
 			expect(options.port).toBe(587)
 			expect(options.secure).toBe(false)
@@ -148,8 +141,8 @@ describe("convenience", () => {
 			expect(options.password).toBe("app-password")
 		})
 
-		it("should return correct settings for sendgridPreset", () => {
-			const options = sendgridPreset(env)
+		it("should return correct settings for sendgrid preset", () => {
+			const options = preset("sendgrid", env)
 			expect(options.host).toBe("smtp.sendgrid.net")
 			expect(options.port).toBe(587)
 			expect(options.secure).toBe(false)
@@ -159,13 +152,13 @@ describe("convenience", () => {
 		})
 
 		it("should return undefined when credentials are not set", () => {
-			const options = gmailPreset({})
+			const options = preset("gmail", {})
 			expect(options.username).toBeUndefined()
 		})
 
 		it("SMTP_USER only: username set but no password", () => {
-			expect(gmailPreset({ SMTP_USER: "user" }).username).toBeUndefined()
-			expect(outlookPreset({ SMTP_PASS: "pass" }).username).toBeUndefined()
+			expect(preset("gmail", { SMTP_USER: "user" }).username).toBeUndefined()
+			expect(preset("outlook", { SMTP_PASS: "pass" }).username).toBeUndefined()
 		})
 	})
 
