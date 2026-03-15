@@ -995,6 +995,124 @@ describe("encodeHeader", () => {
 		})
 	})
 
+	describe("Issue 2 — foldHeaderLine must not break pre-folded encoded-words", () => {
+		it("should not produce \\r\\r\\n in From header with long Japanese name", () => {
+			const longJapaneseName = "山田太郎のとても長い名前テスト用"
+			const email = new Email({
+				from: { name: longJapaneseName, email: "sender@example.com" },
+				to: "recipient@example.com",
+				subject: "Test",
+				text: "body",
+			})
+			const data = email.getEmailData()
+			expect(data).not.toContain("\r\r\n")
+			const msg = extract(data)
+			expect(msg.from?.address).toBe("sender@example.com")
+		})
+
+		it("should produce valid headers when encoded-words already contain CRLF folding", () => {
+			const veryLongName = "これはとても長い日本語の名前で複数のエンコードワードに分割されるテスト"
+			const encoded = encodeHeader(veryLongName)
+			// encodeHeader が複数ワードに分割していることを前提とする
+			expect(encoded).toContain("\r\n ")
+
+			const email = new Email({
+				from: { name: veryLongName, email: "sender@example.com" },
+				to: "recipient@example.com",
+				subject: "Test",
+				text: "body",
+			})
+			const data = email.getEmailData()
+			// 二重 CRLF がヘッダ内に混入しないこと
+			// ヘッダ部分のみ検証（最初の \r\n\r\n まで）
+			const headerSection = data.split("\r\n\r\n")[0]
+			expect(headerSection).not.toMatch(/\r\n\r\n/)
+			expect(headerSection).not.toContain("\r\r\n")
+		})
+	})
+
+	describe("Issue 3 — encodeHeader must not split UTF-8 multibyte characters", () => {
+		it("should produce decodable encoded-words for Japanese text", () => {
+			const input = "日本語テスト"
+			const result = encodeHeader(input)
+			const words = result.split("\r\n ")
+			for (const word of words) {
+				expect(word).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+				// encoded-word からペイロードを取り出しデコードする
+				const payload = word.replace(/^=\?UTF-8\?Q\?/, "").replace(/\?=$/, "")
+				const bytes: number[] = []
+				let i = 0
+				while (i < payload.length) {
+					if (payload[i] === "=") {
+						bytes.push(Number.parseInt(payload.substring(i + 1, i + 3), 16))
+						i += 3
+					} else if (payload[i] === "_") {
+						bytes.push(0x20)
+						i += 1
+					} else {
+						bytes.push(payload.charCodeAt(i))
+						i += 1
+					}
+				}
+				// 不正な UTF-8 バイトシーケンスがあると TextDecoder がエラーを投げる
+				const decoder = new TextDecoder("utf-8", { fatal: true })
+				expect(() => decoder.decode(new Uint8Array(bytes))).not.toThrow()
+			}
+		})
+
+		it("should produce decodable encoded-words for emoji text", () => {
+			const input = "🎉🎊🎆🎇テスト絵文字"
+			const result = encodeHeader(input)
+			const words = result.split("\r\n ")
+			for (const word of words) {
+				expect(word).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+				const payload = word.replace(/^=\?UTF-8\?Q\?/, "").replace(/\?=$/, "")
+				const bytes: number[] = []
+				let i = 0
+				while (i < payload.length) {
+					if (payload[i] === "=") {
+						bytes.push(Number.parseInt(payload.substring(i + 1, i + 3), 16))
+						i += 3
+					} else if (payload[i] === "_") {
+						bytes.push(0x20)
+						i += 1
+					} else {
+						bytes.push(payload.charCodeAt(i))
+						i += 1
+					}
+				}
+				const decoder = new TextDecoder("utf-8", { fatal: true })
+				expect(() => decoder.decode(new Uint8Array(bytes))).not.toThrow()
+			}
+		})
+
+		it("should produce decodable encoded-words for long mixed CJK text", () => {
+			const input = "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。"
+			const result = encodeHeader(input)
+			const words = result.split("\r\n ")
+			for (const word of words) {
+				expect(word).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+				const payload = word.replace(/^=\?UTF-8\?Q\?/, "").replace(/\?=$/, "")
+				const bytes: number[] = []
+				let i = 0
+				while (i < payload.length) {
+					if (payload[i] === "=") {
+						bytes.push(Number.parseInt(payload.substring(i + 1, i + 3), 16))
+						i += 3
+					} else if (payload[i] === "_") {
+						bytes.push(0x20)
+						i += 1
+					} else {
+						bytes.push(payload.charCodeAt(i))
+						i += 1
+					}
+				}
+				const decoder = new TextDecoder("utf-8", { fatal: true })
+				expect(() => decoder.decode(new Uint8Array(bytes))).not.toThrow()
+			}
+		})
+	})
+
 	describe("Real-world header scenarios", () => {
 		it("should encode forwarded subject", () => {
 			const input = "Fwd: 关于会议安排"

@@ -139,7 +139,9 @@ export function encodeQuotedPrintable(text: string, lineLength = 76): string {
 			}
 		}
 
-		if (currentLineLength + encoded.length > lineLength) {
+		const newLength = currentLineLength + encoded.length
+		const hasMoreBytes = i + 1 < bytes.length
+		if (newLength > lineLength || (newLength === lineLength && hasMoreBytes)) {
 			result += "=\r\n"
 			currentLineLength = 0
 		}

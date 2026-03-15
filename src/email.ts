@@ -33,7 +33,8 @@ export function encodeHeader(text: string): string {
 			fragment = `=${byte.toString(16).toUpperCase().padStart(2, "0")}`
 		}
 
-		if (current.length + fragment.length > maxPayload) {
+		const isUtf8LeadByte = (byte & 0xc0) !== 0x80
+		if (current.length + fragment.length > maxPayload && isUtf8LeadByte) {
 			words.push(`${prefix}${current}${suffix}`)
 			current = fragment
 		} else {
@@ -203,6 +204,10 @@ export class Email {
 	}
 
 	private static foldHeaderLine(line: string, maxLen = 78): string {
+		if (line.includes("\r\n")) {
+			const segments = line.split("\r\n")
+			return segments.map((segment) => Email.foldHeaderLine(segment, maxLen)).join("\r\n")
+		}
 		if (line.length <= maxLen) return line
 
 		const parts: string[] = []

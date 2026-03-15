@@ -185,11 +185,51 @@ describe("encodeQuotedPrintable", () => {
 			const input = "a".repeat(100)
 			const result = encodeQuotedPrintable(input)
 
-			// Verify no line exceeds 76 characters (excluding CRLF)
+			// RFC 2045 §6.7: 各行はソフトブレーク含めて76文字以下
 			const lines = result.split("\r\n")
 			for (const line of lines) {
-				const effectiveLength = line.endsWith("=") ? line.length - 1 : line.length
-				expect(effectiveLength).toBeLessThanOrEqual(76)
+				expect(line.length).toBeLessThanOrEqual(76)
+			}
+		})
+
+		it("76文字のASCIIはソフトブレークなしで1行に収まること", () => {
+			const input = "a".repeat(76)
+			const result = encodeQuotedPrintable(input)
+			expect(result).toBe("a".repeat(76))
+			expect(result).not.toContain("=\r\n")
+		})
+
+		it("77文字のASCIIは1行目が76文字以下であること", () => {
+			const input = "a".repeat(77)
+			const result = encodeQuotedPrintable(input)
+			expect(result).toContain("=\r\n")
+
+			const lines = result.split("\r\n")
+			for (const line of lines) {
+				expect(line.length).toBeLessThanOrEqual(76)
+			}
+
+			const decoded = libqp.decode(result).toString()
+			expect(decoded).toBe(input)
+		})
+
+		it("全ての行が76文字以下であること（汎用テスト）", () => {
+			const inputs = [
+				"a".repeat(76),
+				"a".repeat(77),
+				"a".repeat(150),
+				"a".repeat(200),
+				"=".repeat(30),
+				"Hello 世界! ".repeat(20),
+				`${"a".repeat(75)}世`,
+				`${"a".repeat(74)}==`,
+			]
+			for (const input of inputs) {
+				const result = encodeQuotedPrintable(input)
+				const lines = result.split("\r\n")
+				for (const line of lines) {
+					expect(line.length).toBeLessThanOrEqual(76)
+				}
 			}
 		})
 	})
@@ -421,8 +461,7 @@ describe("encodeQuotedPrintable", () => {
 
 			const lines77 = result77.split("\r\n")
 			for (const line of lines77) {
-				const effectiveLength = line.endsWith("=") ? line.length - 1 : line.length
-				expect(effectiveLength).toBeLessThanOrEqual(76)
+				expect(line.length).toBeLessThanOrEqual(76)
 			}
 		})
 
@@ -434,12 +473,11 @@ describe("encodeQuotedPrintable", () => {
 			const decoded = libqp.decode(result).toString()
 			expect(decoded).toBe(input)
 
-			// Verify no line exceeds 76 chars
+			// RFC 2045 §6.7: 各行は76文字以下
 			const lines = result.split("\r\n")
-			lines.forEach((line) => {
-				const effectiveLength = line.endsWith("=") ? line.length - 1 : line.length
-				expect(effectiveLength).toBeLessThanOrEqual(76)
-			})
+			for (const line of lines) {
+				expect(line.length).toBeLessThanOrEqual(76)
+			}
 		})
 
 		it("should handle 77 characters (just over limit)", () => {
@@ -500,15 +538,13 @@ describe("encodeQuotedPrintable", () => {
 				const ourLines = ourResult.split("\r\n")
 				const libqpLines = libqpResult.split(/\r?\n/)
 
-				ourLines.forEach((line) => {
-					const effectiveLength = line.endsWith("=") ? line.length - 1 : line.length
-					expect(effectiveLength).toBeLessThanOrEqual(76)
-				})
+				for (const line of ourLines) {
+					expect(line.length).toBeLessThanOrEqual(76)
+				}
 
-				libqpLines.forEach((line) => {
-					const effectiveLength = line.endsWith("=") ? line.length - 1 : line.length
-					expect(effectiveLength).toBeLessThanOrEqual(76)
-				})
+				for (const line of libqpLines) {
+					expect(line.length).toBeLessThanOrEqual(76)
+				}
 			})
 		})
 

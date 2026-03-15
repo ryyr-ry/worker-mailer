@@ -280,6 +280,12 @@ export class WorkerMailer {
 		this.logger.info("[WorkerMailer] Closing connection", error?.message || "")
 		this.emailSending?.setSentError?.(error || new Error("[WorkerMailer] Mailer is shutting down"))
 
+		const shutdownError = error || new Error("[WorkerMailer] Mailer is shutting down")
+		while (this.emailToBeSent.length > 0) {
+			const email = await this.emailToBeSent.dequeue()
+			email.setSentError(shutdownError)
+		}
+
 		this.emailToBeSent.close()
 
 		try {

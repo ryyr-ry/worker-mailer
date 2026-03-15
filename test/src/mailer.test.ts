@@ -1173,5 +1173,89 @@ describe("WorkerMailer", () => {
 				}),
 			).rejects.toThrow("[WorkerMailer] Send failed: mailer is closed")
 		})
+
+		it("should reject queued emails' sent promises when close() is called", async () => {
+			// start() が dequeue() で待機中に止まるよう、最初のメール送信を永久にブロックする
+			let blockMailFrom: (() => void) | undefined
+			const mailFromBlocked = new Promise<void>((resolve) => {
+				blockMailFrom = resolve
+			})
+
+			mockReader.read
+				// initializeSmtpSession: greet
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				// initializeSmtpSession: ehlo
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				// initializeSmtpSession: auth
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				// start() -> mail(): 最初のメール送信で永久に待機させる
+				.mockImplementationOnce(
+					() =>
+						new Promise<{ value: Uint8Array }>((resolve) => {
+							mailFromBlocked.then(() => {
+								resolve({
+									value: new TextEncoder().encode("250 OK\r\n"),
+								})
+							})
+						}),
+				)
+				// close() -> QUIT 応答
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+			})
+
+			// 最初のメールを送信（start() がこれを dequeue して MAIL FROM で待機状態になる）
+			const firstSent = mailer.send({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "First",
+				text: "First email",
+			})
+
+			// start() が最初のメールを処理し始めるのを待つ
+			await new Promise<void>((resolve) => setTimeout(resolve, 50))
+
+			// キューに2通目・3通目を追加（start() は1通目の MAIL FROM で待機中なのでキューに残る）
+			const secondSent = mailer.send({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Second",
+				text: "Second email",
+			})
+			const thirdSent = mailer.send({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Third",
+				text: "Third email",
+			})
+
+			// close() を呼ぶ → キュー内の2通目・3通目の sent が reject されるべき
+			await mailer.close()
+
+			// ブロック解除（テストのクリーンアップ）
+			blockMailFrom?.()
+
+			// 1通目は emailSending として close() 内で setSentError されるべき
+			await expect(firstSent).rejects.toThrow("[WorkerMailer] Mailer is shutting down")
+
+			// 2通目・3通目はキュー内にあったため、close() のドレインで reject されるべき
+			await expect(secondSent).rejects.toThrow("[WorkerMailer] Mailer is shutting down")
+			await expect(thirdSent).rejects.toThrow("[WorkerMailer] Mailer is shutting down")
+		})
 	})
 })
