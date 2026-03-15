@@ -310,6 +310,29 @@ describe("SendHooks", () => {
 		})
 	})
 
+	it("executes hooks in correct order: beforeSend → send → afterSend", async () => {
+		const order: string[] = []
+		const beforeSend = vi.fn().mockImplementation(() => {
+			order.push("beforeSend")
+		})
+		const afterSend = vi.fn().mockImplementation(() => {
+			order.push("afterSend")
+		})
+		setupConnection()
+		setupSuccessfulSend()
+		mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+		const mailer = await WorkerMailer.connect({
+			...baseOptions,
+			hooks: { beforeSend, afterSend },
+		})
+		await mailer.send(baseEmail)
+		await new Promise<void>((r) => setTimeout(r, 100))
+
+		expect(order).toEqual(["beforeSend", "afterSend"])
+		await mailer.close()
+	})
+
 	it("works correctly with no hooks configured", async () => {
 		setupConnection()
 		setupSuccessfulSend()

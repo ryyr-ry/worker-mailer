@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 import { sendBatch } from "../../src/batch"
 import type { EmailOptions } from "../../src/email/types"
 import { WorkerMailer } from "../../src/mailer"
+import { MockMailer } from "../../src/mock"
 
 vi.mock("cloudflare:sockets", () => ({
 	connect: vi.fn(),
@@ -269,6 +270,55 @@ describe("sendBatch", () => {
 		}
 
 		await mailer.close()
+	})
+
+	it("enforces concurrency limit", async () => {
+		let maxConcurrent = 0
+		let currentConcurrent = 0
+
+		const mock = new MockMailer({ simulateDelay: 50 })
+
+		const originalSend = mock.send.bind(mock)
+		mock.send = async (options: EmailOptions) => {
+			currentConcurrent++
+			maxConcurrent = Math.max(maxConcurrent, currentConcurrent)
+			try {
+				return await originalSend(options)
+			} finally {
+				currentConcurrent--
+			}
+		}
+
+		const emails = Array.from({ length: 10 }, (_, i) => ({
+			from: "a@b.com",
+			to: `user${i}@b.com`,
+			subject: `Email ${i}`,
+			text: "test",
+		}))
+
+		const results = await sendBatch(mock, emails, { concurrency: 3 })
+
+		expect(results).toHaveLength(10)
+		expect(maxConcurrent).toBeLessThanOrEqual(3)
+		expect(maxConcurrent).toBeGreaterThan(1)
+		expect(results.every((r) => r.success)).toBe(true)
+	})
+
+	it("returns results in original email order with concurrency", async () => {
+		const mock = new MockMailer({ simulateDelay: 10 })
+
+		const emails = Array.from({ length: 5 }, (_, i) => ({
+			from: "a@b.com",
+			to: `user${i}@b.com`,
+			subject: `Email ${i}`,
+			text: "test",
+		}))
+
+		const results = await sendBatch(mock, emails, { concurrency: 3 })
+
+		for (let i = 0; i < results.length; i++) {
+			expect(results[i].email.subject).toBe(`Email ${i}`)
+		}
 	})
 
 	it("should abort on failure with continueOnError: false when concurrency is set", async () => {

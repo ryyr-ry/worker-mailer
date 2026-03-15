@@ -241,9 +241,10 @@ describe("DKIM signing", () => {
 			expect(tags.d).toBe("example.com")
 			expect(tags.s).toBe("test")
 			expect(tags.h).toBeDefined()
-			expect(tags.bh).toBeDefined()
-			expect(tags.b).toBeDefined()
-			expect(tags.b.length).toBeGreaterThan(0)
+			expect(tags.bh).toMatch(/^[A-Za-z0-9+/]+=*$/)
+			expect(tags.bh.length).toBeGreaterThan(40)
+			expect(tags.b).toMatch(/^[A-Za-z0-9+/\s]+=*$/)
+			expect(tags.b.replace(/\s/g, "").length).toBeGreaterThan(100)
 		})
 
 		it("signs only specified headers when headerFieldNames provided", async () => {
@@ -305,6 +306,41 @@ describe("DKIM signing", () => {
 			const tagsRelaxed = parseDkimTags(extractDkimHeader(signedRelaxed))
 			const tagsSimple = parseDkimTags(extractDkimHeader(signedSimple))
 			expect(tagsRelaxed.b).not.toBe(tagsSimple.b)
+		})
+
+		it("signs message with empty body", async () => {
+			const msg = "From: a@b.com\r\nTo: c@d.com\r\nSubject: Test\r\n\r\n"
+			const signed = await signDkim(msg, {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testKeyPair.privateKey,
+			})
+			expect(signed).toContain("bh=")
+			const tags = parseDkimTags(extractDkimHeader(signed))
+			// Empty body canonicalized to "\r\n", SHA-256 hash is fixed:
+			expect(tags.bh).toBe("frcCV1k9oG9oKj3dpUqdJg1PxRT2RSN/XKdLCPjaYaY=")
+		})
+
+		it("signs message with multibyte UTF-8 body", async () => {
+			const msg = "From: a@b.com\r\nTo: c@d.com\r\nSubject: Test\r\n\r\nこんにちは世界"
+			const signed = await signDkim(msg, {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testKeyPair.privateKey,
+			})
+			expect(signed.startsWith("DKIM-Signature:")).toBe(true)
+			const tags = parseDkimTags(extractDkimHeader(signed))
+			expect(tags.bh).toMatch(/^[A-Za-z0-9+/]+=*$/)
+		})
+
+		it("does not include l= tag (body length attack prevention)", async () => {
+			const signed = await signDkim(buildTestMessage(), {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testKeyPair.privateKey,
+			})
+			const dkimHeader = extractDkimHeader(signed)
+			expect(dkimHeader).not.toContain("l=")
 		})
 	})
 

@@ -275,6 +275,42 @@ describe("convenience", () => {
 		})
 	})
 
+	describe("DKIM environment variables", () => {
+		it("reads DKIM options from env", () => {
+			const env = {
+				SMTP_HOST: "smtp.example.com",
+				SMTP_PORT: "587",
+				SMTP_DKIM_DOMAIN: "example.com",
+				SMTP_DKIM_SELECTOR: "mail",
+				SMTP_DKIM_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nMIIE...\\n-----END PRIVATE KEY-----",
+			}
+			const options = fromEnv(env)
+			expect(options.dkim).toBeDefined()
+			expect(options.dkim?.domainName).toBe("example.com")
+			expect(options.dkim?.keySelector).toBe("mail")
+			expect(options.dkim?.privateKey).toContain("-----BEGIN PRIVATE KEY-----\nMIIE")
+		})
+
+		it("does not set dkim when env vars are missing", () => {
+			const env = {
+				SMTP_HOST: "smtp.example.com",
+				SMTP_PORT: "587",
+			}
+			const options = fromEnv(env)
+			expect(options.dkim).toBeUndefined()
+		})
+
+		it("does not set dkim when only partial vars present", () => {
+			const env = {
+				SMTP_HOST: "smtp.example.com",
+				SMTP_PORT: "587",
+				SMTP_DKIM_DOMAIN: "example.com",
+			}
+			const options = fromEnv(env)
+			expect(options.dkim).toBeUndefined()
+		})
+	})
+
 	describe("fromEnv prefix customization", () => {
 		it("should read environment variables with a custom prefix", () => {
 			const env = {

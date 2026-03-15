@@ -161,6 +161,44 @@ describe("Calendar invites", () => {
 				"[Calendar] summary must not be empty",
 			)
 		})
+
+		it("handles Unicode characters in summary", () => {
+			const event = createCalendarEvent({
+				summary: "会議：東京オフィス",
+				start: new Date("2025-01-20T10:00:00Z"),
+				end: new Date("2025-01-20T11:00:00Z"),
+				organizer: { email: "org@example.com" },
+			})
+			expect(event.content).toContain("SUMMARY:会議：東京オフィス")
+		})
+
+		it("handles special characters in ORGANIZER CN", () => {
+			const event = createCalendarEvent({
+				summary: "Test",
+				start: new Date("2025-01-20T10:00:00Z"),
+				end: new Date("2025-01-20T11:00:00Z"),
+				organizer: { name: 'John "Boss" O\'Brien; Jr.', email: "org@example.com" },
+			})
+			expect(event.content).toContain("ORGANIZER")
+			// RFC 5545: semicolons must be escaped in CN
+			expect(event.content).toContain("\\;")
+		})
+
+		it("folds lines at 75 octets boundary with multibyte chars", () => {
+			const twentyFiveChars = "あ".repeat(25)
+			const event = createCalendarEvent({
+				summary: twentyFiveChars,
+				start: new Date("2025-01-20T10:00:00Z"),
+				end: new Date("2025-01-20T11:00:00Z"),
+				organizer: { email: "org@example.com" },
+			})
+			const lines = event.content.split("\r\n")
+			const encoder = new TextEncoder()
+			for (const line of lines) {
+				if (line === "") continue
+				expect(encoder.encode(line).length).toBeLessThanOrEqual(75)
+			}
+		})
 	})
 
 	describe("formatDateUtc", () => {

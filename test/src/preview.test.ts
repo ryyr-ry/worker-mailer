@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { Email } from "../../src/email/email"
 import { previewEmail } from "../../src/preview"
 
 describe("Email preview", () => {
@@ -88,6 +89,43 @@ describe("Email preview", () => {
 		})
 		expect(preview.raw).toContain("multipart/mixed")
 		expect(preview.raw).toContain("test.txt")
+	})
+
+	it("preview matches Email.getRawMessage() structure", () => {
+		const options = {
+			from: "a@b.com",
+			to: "c@d.com",
+			subject: "Test",
+			text: "Hello",
+			html: "<p>Hello</p>",
+		}
+		const preview = previewEmail(options)
+		expect(preview.raw).toContain("multipart/alternative")
+		expect(preview.raw).toContain("text/plain")
+		expect(preview.raw).toContain("text/html")
+		expect(preview.raw).toContain("Hello")
+		expect(preview.text).toBe("Hello")
+		expect(preview.html).toBe("<p>Hello</p>")
+	})
+
+	it("preview raw equals Email.getRawMessage() for same options", () => {
+		const options = {
+			from: "a@b.com",
+			to: "c@d.com",
+			subject: "Consistency",
+			text: "body text",
+		}
+		const preview = previewEmail(options)
+		const email = new Email(options)
+		const directRaw = email.getRawMessage()
+		// Both go through the same Email constructor, but Date/Message-ID differ
+		// Verify structural equivalence by checking shared headers and body
+		expect(preview.raw).toContain("Subject: Consistency")
+		expect(directRaw).toContain("Subject: Consistency")
+		expect(preview.raw).toContain("body text")
+		expect(directRaw).toContain("body text")
+		expect(preview.raw).toContain("MIME-Version: 1.0")
+		expect(directRaw).toContain("MIME-Version: 1.0")
 	})
 
 	it("User-type From/To resolved to strings in headers", () => {

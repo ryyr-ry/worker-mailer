@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { sendBatch } from "../../src/batch"
 import type { EmailOptions } from "../../src/email"
+import type { Mailer } from "../../src/mailer"
 import { MockMailer } from "../../src/mock"
 
 const baseEmail: EmailOptions = {
@@ -132,6 +133,15 @@ describe("MockMailer", () => {
 		expect(results).toHaveLength(2)
 		expect(results.every((r) => r.success)).toBe(true)
 		expect(mailer.sendCount).toBe(2)
+	})
+
+	it("satisfies the Mailer interface", () => {
+		const mock = new MockMailer()
+		const mailer: Mailer = mock
+		expect(typeof mailer.send).toBe("function")
+		expect(typeof mailer.close).toBe("function")
+		expect(typeof mailer.ping).toBe("function")
+		expect(typeof mailer[Symbol.asyncDispose]).toBe("function")
 	})
 
 	it("sentEmails is readonly", () => {

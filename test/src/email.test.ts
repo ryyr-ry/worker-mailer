@@ -532,6 +532,69 @@ describe("Email", () => {
 			).toThrow(/CRLF/)
 		})
 
+		it("throws on CRLF in from display name", () => {
+			expect(
+				() =>
+					new Email({
+						from: { name: "Evil\r\nBCC: victim@evil.com", email: "a@b.com" },
+						to: "b@b.com",
+						subject: "Test",
+						text: "test",
+					}),
+			).toThrow("CRLF injection detected in from display name")
+		})
+
+		it("throws on CRLF in to display name", () => {
+			expect(
+				() =>
+					new Email({
+						from: "a@b.com",
+						to: { name: "Evil\r\nX-Injected: yes", email: "b@b.com" },
+						subject: "Test",
+						text: "test",
+					}),
+			).toThrow("CRLF injection detected in to display name")
+		})
+
+		it("throws on CRLF in cc display name", () => {
+			expect(
+				() =>
+					new Email({
+						from: "a@b.com",
+						to: "b@b.com",
+						cc: { name: "Evil\r\nX-Injected: yes", email: "c@b.com" },
+						subject: "Test",
+						text: "test",
+					}),
+			).toThrow("CRLF injection detected in cc display name")
+		})
+
+		it("throws on CRLF in reply display name", () => {
+			expect(
+				() =>
+					new Email({
+						from: "a@b.com",
+						to: "b@b.com",
+						reply: { name: "Evil\r\nX-Injected: yes", email: "r@b.com" },
+						subject: "Test",
+						text: "test",
+					}),
+			).toThrow("CRLF injection detected in reply display name")
+		})
+
+		it("throws on CRLF in bcc display name", () => {
+			expect(
+				() =>
+					new Email({
+						from: "a@b.com",
+						to: "b@b.com",
+						bcc: { name: "Evil\r\nX-Injected: yes", email: "bcc@b.com" },
+						subject: "Test",
+						text: "test",
+					}),
+			).toThrow("CRLF injection detected in bcc display name")
+		})
+
 		it("should allow normal headers without CRLF", () => {
 			const email = new Email({
 				from: "sender@example.com",

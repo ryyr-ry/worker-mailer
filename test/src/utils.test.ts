@@ -1,7 +1,8 @@
 import * as libqp from "libqp"
-import { beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	BlockingQueue,
+	backoff,
 	decode,
 	encode,
 	encodeQuotedPrintable,
@@ -90,6 +91,62 @@ describe("BlockingQueue", () => {
 	it("should reject on dequeue() after close()", async () => {
 		queue.close()
 		await expect(queue.dequeue()).rejects.toThrow("Queue is closed")
+	})
+})
+
+describe("backoff", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	it("returns a promise", () => {
+		const result = backoff(0)
+		expect(result).toBeInstanceOf(Promise)
+		vi.advanceTimersByTime(30_000)
+	})
+
+	it("delays increase with attempt number", async () => {
+		const p0 = backoff(0)
+		vi.advanceTimersByTime(999)
+		const settled0 = await Promise.race([p0.then(() => true), Promise.resolve(false)])
+		expect(settled0).toBe(false)
+		vi.advanceTimersByTime(1)
+		await p0
+
+		const p1 = backoff(1)
+		vi.advanceTimersByTime(1999)
+		const settled1 = await Promise.race([p1.then(() => true), Promise.resolve(false)])
+		expect(settled1).toBe(false)
+		vi.advanceTimersByTime(1)
+		await p1
+	})
+
+	it("caps delay at 30 seconds", async () => {
+		const p = backoff(100)
+		vi.advanceTimersByTime(29_999)
+		const settled = await Promise.race([p.then(() => true), Promise.resolve(false)])
+		expect(settled).toBe(false)
+		vi.advanceTimersByTime(1)
+		await p
+	})
+
+	it("attempt 0 resolves in 1000ms", async () => {
+		const p = backoff(0)
+		vi.advanceTimersByTime(1000)
+		await p
+	})
+
+	it("attempt 2 resolves in 4000ms", async () => {
+		const p = backoff(2)
+		vi.advanceTimersByTime(3999)
+		const settled = await Promise.race([p.then(() => true), Promise.resolve(false)])
+		expect(settled).toBe(false)
+		vi.advanceTimersByTime(1)
+		await p
 	})
 })
 

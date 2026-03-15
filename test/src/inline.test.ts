@@ -192,6 +192,33 @@ describe("Inline images (CID)", () => {
 		expect(raw).toContain("Content-Transfer-Encoding: base64")
 	})
 
+	it("Uint8Array content is correctly base64 encoded", () => {
+		const bytes = new Uint8Array([72, 101, 108, 108, 111])
+		const email = makeEmail({
+			inlineAttachments: [
+				{ cid: "data", filename: "data.bin", content: bytes, mimeType: "application/octet-stream" },
+			],
+		})
+		const raw = email.getRawMessage()
+		expect(raw).toContain("SGVsbG8=")
+	})
+
+	it("ArrayBuffer content is correctly base64 encoded", () => {
+		const bytes = new Uint8Array([72, 101, 108, 108, 111])
+		const email = makeEmail({
+			inlineAttachments: [
+				{
+					cid: "data",
+					filename: "data.bin",
+					content: bytes.buffer,
+					mimeType: "application/octet-stream",
+				},
+			],
+		})
+		const raw = email.getRawMessage()
+		expect(raw).toContain("SGVsbG8=")
+	})
+
 	it("html + inline + attach (no text) produces mixed > related", () => {
 		const email = makeEmail({
 			attachments: [

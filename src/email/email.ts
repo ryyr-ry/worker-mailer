@@ -96,10 +96,22 @@ export class Email {
 		if (Email.CRLF_PATTERN.test(this.subject)) {
 			throw new Error("CRLF injection detected in subject")
 		}
+		this.validateUserNoCRLF(this.from, "from")
+		if (this.to) for (const u of this.to) this.validateUserNoCRLF(u, "to")
+		if (this.cc) for (const u of this.cc) this.validateUserNoCRLF(u, "cc")
+		if (this.bcc) for (const u of this.bcc) this.validateUserNoCRLF(u, "bcc")
+		if (this.reply) this.validateUserNoCRLF(this.reply, "reply")
+
 		for (const [key, value] of Object.entries(this.headers)) {
 			if (Email.CRLF_PATTERN.test(key) || Email.CRLF_PATTERN.test(value)) {
 				throw new Error(`CRLF injection detected in header: ${key}`)
 			}
+		}
+	}
+
+	private validateUserNoCRLF(user: { name?: string; email: string }, field: string) {
+		if (user.name && Email.CRLF_PATTERN.test(user.name)) {
+			throw new Error(`CRLF injection detected in ${field} display name`)
 		}
 	}
 
