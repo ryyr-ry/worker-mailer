@@ -101,7 +101,7 @@ export class WorkerMailer {
 		this.dsn = options.dsn || {}
 
 		this.socketTimeoutMs = options.socketTimeoutMs || 60_000
-		this.responseTimeoutMs = options.socketTimeoutMs || 30_000
+		this.responseTimeoutMs = options.responseTimeoutMs || 30_000
 		this.socket = connect(
 			{
 				hostname: this.host,

@@ -188,6 +188,38 @@ describe("WorkerMailer", () => {
 				}),
 			).rejects.toThrow("Socket timeout!")
 		})
+
+		it("should use responseTimeoutMs independently from socketTimeoutMs", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain", "login"],
+				socketTimeoutMs: 120_000,
+				responseTimeoutMs: 15_000,
+			})
+
+			expect((mailer as unknown as { socketTimeoutMs: number }).socketTimeoutMs).toBe(
+				120_000,
+			)
+			expect((mailer as unknown as { responseTimeoutMs: number }).responseTimeoutMs).toBe(
+				15_000,
+			)
+			await mailer.close()
+		})
 	})
 
 	describe("server capabilities", () => {
