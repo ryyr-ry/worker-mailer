@@ -1,6 +1,6 @@
 import { connect } from "cloudflare:sockets"
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
-import { WorkerMailer } from "../../src/mailer"
+import { WorkerMailer, WorkerMailerPool } from "../../src/mailer"
 
 vi.mock("cloudflare:sockets", () => ({
 	connect: vi.fn(),
@@ -1211,6 +1211,8 @@ describe("WorkerMailer", () => {
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("221 Bye\r\n"),
 				})
+				// 以降の read() は stream 終了を返す（start() ループのクリーンアップ用）
+				.mockResolvedValue({ value: undefined, done: true })
 
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
@@ -1226,6 +1228,7 @@ describe("WorkerMailer", () => {
 				subject: "First",
 				text: "First email",
 			})
+			firstSent.catch(() => {})
 
 			// start() が最初のメールを処理し始めるのを待つ
 			await new Promise<void>((resolve) => setTimeout(resolve, 50))
@@ -1237,12 +1240,14 @@ describe("WorkerMailer", () => {
 				subject: "Second",
 				text: "Second email",
 			})
+			secondSent.catch(() => {})
 			const thirdSent = mailer.send({
 				from: "sender@example.com",
 				to: "recipient@example.com",
 				subject: "Third",
 				text: "Third email",
 			})
+			thirdSent.catch(() => {})
 
 			// close() を呼ぶ → キュー内の2通目・3通目の sent が reject されるべき
 			await mailer.close()
@@ -1256,6 +1261,242 @@ describe("WorkerMailer", () => {
 			// 2通目・3通目はキュー内にあったため、close() のドレインで reject されるべき
 			await expect(secondSent).rejects.toThrow("[WorkerMailer] Mailer is shutting down")
 			await expect(thirdSent).rejects.toThrow("[WorkerMailer] Mailer is shutting down")
+		})
+	})
+
+	describe("Symbol.asyncDispose", () => {
+		it("should have Symbol.asyncDispose method", () => {
+			expect(WorkerMailer.prototype[Symbol.asyncDispose]).toBeTypeOf("function")
+		})
+
+		it("should call close() when Symbol.asyncDispose is invoked", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain"],
+			})
+
+			await mailer[Symbol.asyncDispose]()
+
+			expect(mockSocket.close).toHaveBeenCalled()
+		})
+	})
+})
+
+describe("WorkerMailerPool", () => {
+	interface MockReader {
+		read: Mock
+		releaseLock: Mock
+	}
+	interface MockWriter {
+		write: Mock
+		releaseLock: Mock
+	}
+	interface MockSocket {
+		readable: { getReader: () => MockReader }
+		writable: { getWriter: () => MockWriter }
+		opened: Promise<void>
+		close: Mock
+		startTls: Mock
+	}
+
+	let mockSockets: MockSocket[]
+
+	function createMockSocket(): MockSocket {
+		const mockReader: MockReader = {
+			read: vi.fn(),
+			releaseLock: vi.fn(),
+		}
+		const mockWriter: MockWriter = {
+			write: vi.fn(),
+			releaseLock: vi.fn(),
+		}
+		return {
+			readable: { getReader: () => mockReader },
+			writable: { getWriter: () => mockWriter },
+			opened: Promise.resolve(),
+			close: vi.fn(),
+			startTls: vi.fn().mockReturnValue({
+				readable: { getReader: () => mockReader },
+				writable: { getWriter: () => mockWriter },
+			}),
+		}
+	}
+
+	function setupConnectionMocks(socket: MockSocket): void {
+		const reader = socket.readable.getReader()
+		reader.read
+			.mockResolvedValueOnce({
+				value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+			})
+			.mockResolvedValueOnce({
+				value: new TextEncoder().encode(
+					"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+				),
+			})
+			.mockResolvedValueOnce({
+				value: new TextEncoder().encode("235 Authentication successful\r\n"),
+			})
+	}
+
+	beforeEach(() => {
+		vi.clearAllMocks()
+		mockSockets = []
+
+		vi.mocked(connect).mockImplementation(() => {
+			const socket = createMockSocket()
+			setupConnectionMocks(socket)
+			mockSockets.push(socket)
+			return socket as unknown as ReturnType<typeof connect>
+		})
+	})
+
+	const poolOptions = {
+		host: "smtp.example.com",
+		port: 587,
+		credentials: { username: "user", password: "pass" },
+		authType: ["plain"] as const,
+	}
+
+	describe("connect", () => {
+		it("should create multiple connections based on poolSize", async () => {
+			const pool = new WorkerMailerPool({ ...poolOptions, poolSize: 4 })
+			await pool.connect()
+
+			expect(connect).toHaveBeenCalledTimes(4)
+
+			await pool.close()
+		})
+
+		it("should default poolSize to 3", async () => {
+			const pool = new WorkerMailerPool(poolOptions)
+			await pool.connect()
+
+			expect(connect).toHaveBeenCalledTimes(3)
+
+			await pool.close()
+		})
+	})
+
+	describe("send", () => {
+		it("should distribute sends across connections in round-robin", async () => {
+			const pool = new WorkerMailerPool({ ...poolOptions, poolSize: 3 })
+			await pool.connect()
+
+			const emailOptions = {
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Test",
+				text: "Hello",
+			}
+
+			// 3つのソケットにそれぞれ送信用モックを設定
+			for (const socket of mockSockets) {
+				const reader = socket.readable.getReader()
+				// MAIL FROM, RCPT TO, DATA, BODY の各レスポンス
+				reader.read
+					.mockResolvedValueOnce({
+						value: new TextEncoder().encode("250 OK\r\n"),
+					})
+					.mockResolvedValueOnce({
+						value: new TextEncoder().encode("250 OK\r\n"),
+					})
+					.mockResolvedValueOnce({
+						value: new TextEncoder().encode("354 Start mail input\r\n"),
+					})
+					.mockResolvedValueOnce({
+						value: new TextEncoder().encode("250 OK\r\n"),
+					})
+			}
+
+			// 3通送信 → 各コネクションに1通ずつ分散されるべき
+			await pool.send(emailOptions)
+			await pool.send(emailOptions)
+			await pool.send(emailOptions)
+
+			// 各ソケットの writer に書き込みが行われたことを確認
+			for (const socket of mockSockets) {
+				const writer = socket.writable.getWriter()
+				// 接続時の EHLO + AUTH PLAIN + 送信時の MAIL FROM, RCPT TO, DATA, BODY
+				expect(writer.write.mock.calls.length).toBeGreaterThanOrEqual(4)
+			}
+
+			await pool.close()
+		})
+
+		it("should reject when pool is not connected", async () => {
+			const pool = new WorkerMailerPool(poolOptions)
+
+			await expect(
+				pool.send({
+					from: "sender@example.com",
+					to: "recipient@example.com",
+					subject: "Test",
+					text: "Hello",
+				}),
+			).rejects.toThrow("[WorkerMailerPool] Send failed: pool is not connected")
+		})
+	})
+
+	describe("close", () => {
+		it("should close all connections", async () => {
+			const pool = new WorkerMailerPool({ ...poolOptions, poolSize: 2 })
+			await pool.connect()
+
+			// close 時の QUIT + レスポンス用モック
+			for (const socket of mockSockets) {
+				const reader = socket.readable.getReader()
+				reader.read.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+			}
+
+			await pool.close()
+
+			for (const socket of mockSockets) {
+				expect(socket.close).toHaveBeenCalled()
+			}
+		})
+	})
+
+	describe("Symbol.asyncDispose", () => {
+		it("should have Symbol.asyncDispose method", () => {
+			expect(WorkerMailerPool.prototype[Symbol.asyncDispose]).toBeTypeOf("function")
+		})
+
+		it("should call close() when Symbol.asyncDispose is invoked", async () => {
+			const pool = new WorkerMailerPool({ ...poolOptions, poolSize: 2 })
+			await pool.connect()
+
+			for (const socket of mockSockets) {
+				const reader = socket.readable.getReader()
+				reader.read.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+			}
+
+			await pool[Symbol.asyncDispose]()
+
+			for (const socket of mockSockets) {
+				expect(socket.close).toHaveBeenCalled()
+			}
 		})
 	})
 })
