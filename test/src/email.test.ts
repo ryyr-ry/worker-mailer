@@ -117,7 +117,7 @@ describe("Email", () => {
 			}
 		})
 
-		it("should include CC and BCC headers when provided", () => {
+		it("should include CC headers and exclude BCC from headers", () => {
 			const email = new Email({
 				from: "sender@example.com",
 				to: "recipient@example.com",
@@ -137,7 +137,8 @@ describe("Email", () => {
 					raw: '"CC2" <cc2@example.com>',
 				},
 			])
-			expect(msg.bcc).toEqual([{ address: "bcc@example.com", raw: "bcc@example.com" }])
+			expect(msg.bcc).toBeUndefined()
+			expect(data).not.toContain("bcc@example.com")
 		})
 
 		it("should include Reply-To when provided", () => {
@@ -442,6 +443,36 @@ describe("Email", () => {
 				},
 			})
 			expect(email.headers["X-Custom"]).toBe("normal-value")
+		})
+
+		it("should not leak BCC addresses in email headers (P0-2)", () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				bcc: ["secret@example.com", "hidden@example.com"],
+				subject: "Test",
+				text: "test",
+			})
+
+			const data = email.getEmailData()
+			expect(data).not.toContain("secret@example.com")
+			expect(data).not.toContain("hidden@example.com")
+			expect(data).not.toMatch(/BCC:/i)
+		})
+
+		it("should not leak BCC with named users in email headers", () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				bcc: [{ email: "secret@example.com", name: "Secret User" }],
+				subject: "Test",
+				text: "test",
+			})
+
+			const data = email.getEmailData()
+			expect(data).not.toContain("secret@example.com")
+			expect(data).not.toContain("Secret User")
+			expect(data).not.toMatch(/BCC:/i)
 		})
 	})
 })
