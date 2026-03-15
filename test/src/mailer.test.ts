@@ -212,12 +212,8 @@ describe("WorkerMailer", () => {
 				responseTimeoutMs: 15_000,
 			})
 
-			expect((mailer as unknown as { socketTimeoutMs: number }).socketTimeoutMs).toBe(
-				120_000,
-			)
-			expect((mailer as unknown as { responseTimeoutMs: number }).responseTimeoutMs).toBe(
-				15_000,
-			)
+			expect((mailer as unknown as { socketTimeoutMs: number }).socketTimeoutMs).toBe(120_000)
+			expect((mailer as unknown as { responseTimeoutMs: number }).responseTimeoutMs).toBe(15_000)
 			await mailer.close()
 		})
 	})
@@ -726,6 +722,113 @@ describe("WorkerMailer", () => {
 
 			expect(mockWriter.write).toHaveBeenCalledWith(expect.any(Uint8Array)) // QUIT command
 			expect(mockSocket.close).toHaveBeenCalled()
+		})
+	})
+
+	describe("security", () => {
+		it("should reject CRLF in email addresses (SMTP command injection)", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain", "login"],
+			})
+
+			await expect(
+				mailer.send({
+					from: { email: "attacker@evil.com\r\nRCPT TO: <victim@target.com>" },
+					to: [{ email: "legit@example.com" }],
+					subject: "test",
+					text: "test",
+				}),
+			).rejects.toThrow(/CRLF/)
+
+			await mailer.close()
+		})
+
+		it("should reject CRLF in recipient email addresses", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain", "login"],
+			})
+
+			// MAIL FROM will succeed, then RCPT TO should fail with CRLF
+			mockReader.read.mockResolvedValueOnce({
+				value: new TextEncoder().encode("250 Sender OK\r\n"),
+			})
+
+			await expect(
+				mailer.send({
+					from: { email: "sender@example.com" },
+					to: [{ email: "victim@target.com\r\nDATA" }],
+					subject: "test",
+					text: "test",
+				}),
+			).rejects.toThrow(/CRLF/)
+
+			await mailer.close()
+		})
+
+		it("should reject CRLF in DSN envelope ID", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250-DSN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain", "login"],
+			})
+
+			await expect(
+				mailer.send({
+					from: { email: "sender@example.com" },
+					to: [{ email: "legit@example.com" }],
+					subject: "test",
+					text: "test",
+					dsnOverride: { envelopeId: "id\r\nRCPT TO: <victim@evil.com>" },
+				}),
+			).rejects.toThrow(/CRLF/)
+
+			await mailer.close()
 		})
 	})
 })

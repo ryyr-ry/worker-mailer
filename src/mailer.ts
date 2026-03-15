@@ -168,6 +168,9 @@ export class WorkerMailer {
 	}
 
 	private async writeLine(line: string) {
+		if (/[\r\n]/.test(line)) {
+			throw new Error("CRLF injection detected in SMTP command")
+		}
 		await this.write(`${line}\r\n`)
 	}
 
