@@ -1,6 +1,7 @@
 import { connect } from "cloudflare:sockets"
 import { Email, type EmailOptions } from "./email"
 import Logger, { type LogLevel } from "./logger"
+import type { SendResult } from "./result"
 import { BlockingQueue, decode, encode, execTimeout, toBase64 } from "./utils"
 
 export type AuthType = "plain" | "login" | "cram-md5"
@@ -37,6 +38,7 @@ export type WorkerMailerOptions = {
 	responseTimeoutMs?: number
 	ehloHostname?: string
 	maxRetries?: number
+	autoReconnect?: boolean
 	onError?: (error: Error) => void
 }
 
@@ -54,6 +56,7 @@ export class WorkerMailer {
 	private readonly responseTimeoutMs: number
 	private readonly ehloHostname: string
 	private readonly maxRetries: number
+	private readonly autoReconnect: boolean
 	private readonly onError?: (error: Error) => void
 
 	private reader: ReadableStreamDefaultReader<Uint8Array>
@@ -110,6 +113,7 @@ export class WorkerMailer {
 		this.responseTimeoutMs = options.responseTimeoutMs || 30_000
 		this.ehloHostname = options.ehloHostname || this.host
 		this.maxRetries = options.maxRetries ?? 3
+		this.autoReconnect = options.autoReconnect ?? false
 		this.onError = options.onError
 		this.socket = connect(
 			{
@@ -141,19 +145,20 @@ export class WorkerMailer {
 		return mailer
 	}
 
-	public send(options: EmailOptions): Promise<void> {
+	public send(options: EmailOptions): Promise<SendResult> {
 		if (this.emailToBeSent.closed) {
 			return Promise.reject(new Error("[WorkerMailer] Send failed: mailer is closed"))
 		}
 		const email = new Email(options)
 		this.emailToBeSent.enqueue(email)
-		return email.sent
+		return email.sentResult
 	}
 
-	static async send(options: WorkerMailerOptions, email: EmailOptions): Promise<void> {
+	static async send(options: WorkerMailerOptions, email: EmailOptions): Promise<SendResult> {
 		const mailer = await WorkerMailer.connect(options)
-		await mailer.send(email)
+		const result = await mailer.send(email)
 		await mailer.close()
+		return result
 	}
 
 	private async readTimeout(): Promise<string> {
@@ -231,11 +236,26 @@ export class WorkerMailer {
 			let sent = false
 			for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
 				try {
+					const startTime = Date.now()
 					await this.mail()
 					await this.rcpt()
 					await this.data()
-					await this.body()
-					this.emailSending.setSent()
+					const bodyResponse = await this.body()
+					const responseTime = Date.now() - startTime
+
+					const allRecipients = [
+						...(this.emailSending.to ?? []),
+						...(this.emailSending.cc ?? []),
+						...(this.emailSending.bcc ?? []),
+					].map((u) => u.email)
+
+					this.emailSending.setSentResult({
+						messageId: this.emailSending.headers["Message-ID"] ?? "",
+						accepted: allRecipients,
+						rejected: [],
+						responseTime,
+						response: bodyResponse.trim(),
+					})
 					sent = true
 					break
 				} catch (e: unknown) {
@@ -250,6 +270,14 @@ export class WorkerMailer {
 					try {
 						await this.rset()
 					} catch (rsetError: unknown) {
+						if (this.autoReconnect && attempt < this.maxRetries) {
+							const reconnected = await this.tryReconnect()
+							if (reconnected) {
+								const delayMs = Math.min(1000 * 2 ** attempt, 30_000)
+								await new Promise<void>((r) => setTimeout(r, delayMs))
+								continue
+							}
+						}
 						if (attempt >= this.maxRetries) {
 							this.emailSending.setSentError(e)
 							const fatalError =
@@ -258,7 +286,6 @@ export class WorkerMailer {
 							this.reportFatalError(fatalError)
 							return
 						}
-						// RSET 失敗でもリトライ回数が残っていれば指数バックオフ後に再試行
 					}
 					if (attempt < this.maxRetries) {
 						const delayMs = Math.min(1000 * 2 ** attempt, 30_000)
@@ -273,6 +300,62 @@ export class WorkerMailer {
 			}
 			this.emailSending = null
 		}
+	}
+
+	private async tryReconnect(): Promise<boolean> {
+		const maxReconnectAttempts = 3
+		for (let i = 0; i < maxReconnectAttempts; i++) {
+			try {
+				this.logger.info(`[WorkerMailer] Reconnecting (attempt ${i + 1}/${maxReconnectAttempts})`)
+				try {
+					this.reader.releaseLock()
+				} catch (_: unknown) {
+					/* すでにリリース済みの場合 */
+				}
+				try {
+					this.writer.releaseLock()
+				} catch (_: unknown) {
+					/* すでにリリース済みの場合 */
+				}
+				try {
+					this.socket
+						.close()
+						.catch(() =>
+							this.logger.error("[WorkerMailer] Failed to close socket during reconnect"),
+						)
+				} catch (_: unknown) {
+					/* ソケットが既に閉じている場合 */
+				}
+
+				this.socket = connect(
+					{ hostname: this.host, port: this.port },
+					{
+						secureTransport: this.secure ? "on" : this.startTls ? "starttls" : "off",
+						allowHalfOpen: false,
+					},
+				)
+				this.reader = this.socket.readable.getReader()
+				this.writer = this.socket.writable.getWriter()
+
+				this.supportsDSN = false
+				this.allowAuth = false
+				this.authTypeSupported = []
+				this.supportsStartTls = false
+
+				await this.initializeSmtpSession()
+				this.logger.info("[WorkerMailer] Reconnection successful")
+				return true
+			} catch (reconnectError: unknown) {
+				const msg =
+					reconnectError instanceof Error ? reconnectError.message : String(reconnectError)
+				this.logger.error(`[WorkerMailer] Reconnect failed: ${msg}`)
+				if (i < maxReconnectAttempts - 1) {
+					const backoffMs = Math.min(1000 * 2 ** i, 30_000)
+					await new Promise<void>((r) => setTimeout(r, backoffMs))
+				}
+			}
+		}
+		return false
 	}
 
 	public async close(error?: Error) {
@@ -526,12 +609,13 @@ export class WorkerMailer {
 		}
 	}
 
-	private async body() {
+	private async body(): Promise<string> {
 		await this.write(this.emailSending?.getEmailData())
 		const response = await this.readTimeout()
 		if (!response.startsWith("2")) {
 			throw new Error(`[WorkerMailer] Send body failed: ${response}`)
 		}
+		return response
 	}
 
 	private async rset() {
@@ -604,7 +688,7 @@ export class WorkerMailerPool {
 		return this
 	}
 
-	send(options: EmailOptions): Promise<void> {
+	send(options: EmailOptions): Promise<SendResult> {
 		if (this.mailers.length === 0) {
 			return Promise.reject(new Error("[WorkerMailerPool] Send failed: pool is not connected"))
 		}

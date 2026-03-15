@@ -1,4 +1,6 @@
+import type { SendResult } from "./result"
 import { arrayBufferToBase64, encode, encodeQuotedPrintable } from "./utils"
+import { validateEmail as checkEmail } from "./validate"
 
 function isAsciiOnly(text: string): boolean {
 	for (let i = 0; i < text.length; i++) {
@@ -110,14 +112,32 @@ export class Email {
 
 	public readonly headers: Record<string, string>
 
-	public setSent!: () => void
+	public setSentResult!: (result: SendResult) => void
 	public setSentError!: (e: unknown) => void
-	public sent = new Promise<void>((resolve, reject) => {
-		this.setSent = resolve
+
+	public sentResult = new Promise<SendResult>((resolve, reject) => {
+		this.setSentResult = resolve
 		this.setSentError = reject
 	})
 
+	public readonly sent: Promise<void> = this.sentResult.then(() => {})
+
+	public setSent(): void {
+		this.setSentResult({
+			messageId: this.headers["Message-ID"] ?? "",
+			accepted: [],
+			rejected: [],
+			responseTime: 0,
+			response: "",
+		})
+	}
+
 	constructor(options: EmailOptions) {
+		// sentResult が主要なエラーチャネルだが、sent のみ使用されるケースもあるため
+		// 両方の未処理拒否を抑制
+		this.sentResult.catch(() => {})
+		this.sent.catch(() => {})
+
 		if (!options.text && !options.html) {
 			throw new Error("At least one of text or html must be provided")
 		}
@@ -150,8 +170,6 @@ export class Email {
 
 	private static readonly CRLF_PATTERN = /[\r\n]/
 
-	private static readonly EMAIL_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/
-
 	private validateNoCRLF() {
 		if (Email.CRLF_PATTERN.test(this.subject)) {
 			throw new Error("CRLF injection detected in subject")
@@ -183,8 +201,14 @@ export class Email {
 		}
 	}
 
+	private static readonly ANGLE_BRACKET_PATTERN = /[<>]/
+
 	private validateEmail(email: string, field: string) {
-		if (!Email.EMAIL_PATTERN.test(email)) {
+		if (Email.ANGLE_BRACKET_PATTERN.test(email)) {
+			throw new Error(`Invalid email address in ${field}: ${email}`)
+		}
+		const result = checkEmail(email)
+		if (!result.valid) {
 			throw new Error(`Invalid email address in ${field}: ${email}`)
 		}
 	}
