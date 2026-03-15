@@ -84,6 +84,18 @@ export function fromEnv(env: Record<string, unknown>, prefix = "SMTP_"): WorkerM
 		options.maxRetries = maxRetries
 	}
 
+	const dkimDomain = getString(env, `${prefix}DKIM_DOMAIN`)
+	const dkimSelector = getString(env, `${prefix}DKIM_SELECTOR`)
+	const dkimPrivateKey = getString(env, `${prefix}DKIM_PRIVATE_KEY`)
+
+	if (dkimDomain && dkimSelector && dkimPrivateKey) {
+		options.dkim = {
+			domainName: dkimDomain,
+			keySelector: dkimSelector,
+			privateKey: dkimPrivateKey.replace(/\\n/g, "\n"),
+		}
+	}
+
 	return options
 }
 

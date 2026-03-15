@@ -1,6 +1,7 @@
 export * from "./batch"
 export * from "./calendar"
 export * from "./convenience"
+export * from "./dkim"
 export * from "./email"
 export { LogLevel } from "./logger"
 export * from "./mailer"

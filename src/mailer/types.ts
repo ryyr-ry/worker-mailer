@@ -1,3 +1,4 @@
+import type { DkimOptions } from "../dkim"
 import type { DsnOptions, EmailOptions } from "../email/types"
 import type { LogLevel } from "../logger"
 import type { SendResult } from "../result"
@@ -51,6 +52,7 @@ export type WorkerMailerOptions = {
 	maxRetries?: number
 	autoReconnect?: boolean
 	hooks?: SendHooks
+	dkim?: DkimOptions
 }
 
 export type SmtpCapabilities = {

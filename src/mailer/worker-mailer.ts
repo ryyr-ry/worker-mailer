@@ -1,4 +1,5 @@
 import { connect } from "cloudflare:sockets"
+import { type DkimOptions, resolveDkimKey, signDkim } from "../dkim"
 import { Email } from "../email/email"
 import { applyDotStuffing } from "../email/mime"
 import type { EmailOptions } from "../email/types"
@@ -38,6 +39,8 @@ export class WorkerMailer implements Mailer {
 	private readonly hooks?: SendHooks
 	private readonly logger: Logger
 	private readonly dsn: WorkerMailerOptions["dsn"]
+	private readonly dkimOptions?: DkimOptions
+	private dkimKey?: CryptoKey
 	private active = false
 	private emailSending: Email | null = null
 	private emailToBeSent = new BlockingQueue<Email>()
@@ -61,6 +64,7 @@ export class WorkerMailer implements Mailer {
 		this.maxRetries = options.maxRetries ?? 3
 		this.autoReconnect = options.autoReconnect ?? false
 		this.hooks = options.hooks
+		this.dkimOptions = options.dkim
 		this.logger = new Logger(options.logLevel, `[WorkerMailer:${this.host}:${this.port}]`)
 		this.transport = this.createTransport()
 	}
@@ -153,7 +157,12 @@ export class WorkerMailer implements Mailer {
 		await mailFrom(this.transport, email.from.email, this.capabilities, this.dsn, email.dsnOverride)
 		await rcptTo(this.transport, allRecipients, this.capabilities, this.dsn, email.dsnOverride)
 		await dataCommand(this.transport)
-		const smtpData = `${applyDotStuffing(email.getRawMessage())}\r\n.\r\n`
+		let rawMessage = email.getRawMessage()
+		if (this.dkimOptions) {
+			if (!this.dkimKey) this.dkimKey = await resolveDkimKey(this.dkimOptions)
+			rawMessage = await signDkim(rawMessage, { ...this.dkimOptions, privateKey: this.dkimKey })
+		}
+		const smtpData = `${applyDotStuffing(rawMessage)}\r\n.\r\n`
 		const bodyResponse = await sendBody(this.transport, smtpData)
 		const result: SendResult = {
 			messageId: email.headers["Message-ID"] ?? "",
