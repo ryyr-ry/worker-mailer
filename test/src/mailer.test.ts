@@ -931,5 +931,36 @@ describe("WorkerMailer", () => {
 
 			await mailer.close()
 		})
+
+		it("should warn when CRAM-MD5 authentication is used", async () => {
+			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH CRAM-MD5\r\n250 AUTH=CRAM-MD5\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("334 PDEyMzQ1QHNtdHAuZXhhbXBsZS5jb20+\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["cram-md5"],
+			})
+
+			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("CRAM-MD5"))
+
+			warnSpy.mockRestore()
+		})
 	})
 })

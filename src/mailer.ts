@@ -372,9 +372,15 @@ export class WorkerMailer {
 	}
 
 	private async authWithCramMD5() {
+		this.logger.warn(
+			"CRAM-MD5 uses HMAC-MD5 which is cryptographically deprecated. Consider using PLAIN or LOGIN over TLS instead.",
+		)
 		await this.writeLine("AUTH CRAM-MD5")
 		const challengeResponse = await this.readTimeout()
-		const challengeWithBase64Encoded = challengeResponse.match(/^334\s+(.+)$/)?.pop()
+		const challengeWithBase64Encoded = challengeResponse
+			.trim()
+			.match(/^334\s+(.+)$/)
+			?.pop()
 		if (!challengeWithBase64Encoded) {
 			throw new Error(`Invalid CRAM-MD5 challenge: ${challengeResponse}`)
 		}
