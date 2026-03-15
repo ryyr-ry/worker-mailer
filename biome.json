@@ -19,8 +19,7 @@
 		"rules": {
 			"recommended": true,
 			"suspicious": {
-				"noExplicitAny": "warn",
-				"noControlCharactersInRegex": "off"
+				"noExplicitAny": "warn"
 			}
 		}
 	},

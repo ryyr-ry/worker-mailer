@@ -1,8 +1,14 @@
 import { encode, encodeQuotedPrintable } from "./utils"
 
+function isAsciiOnly(text: string): boolean {
+	for (let i = 0; i < text.length; i++) {
+		if (text.charCodeAt(i) > 127) return false
+	}
+	return true
+}
+
 export function encodeHeader(text: string): string {
-	// If the text contains any non-ASCII characters, encode the whole string
-	if (!/[^\x00-\x7F]/.test(text)) {
+	if (isAsciiOnly(text)) {
 		return text
 	}
 	const bytes = encode(text)
