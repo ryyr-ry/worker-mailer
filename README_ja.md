@@ -1,8 +1,7 @@
-# Worker Mailer
+# worker-mailer
 
 [English](./README.md) | [日本語](./README_ja.md)
 
-[![npm version](https://badge.fury.io/js/worker-mailer.svg)](https://badge.fury.io/js/worker-mailer)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Worker Mailer** は [Cloudflare Workers](https://workers.cloudflare.com/) 上で動作する軽量SMTPメーラーライブラリです。[Cloudflare TCP Sockets](https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/) を利用しており、外部依存はゼロです。
@@ -16,7 +15,7 @@
 - 📅 DSN（配信状態通知）対応
 - 🔄 コネクションプールによる高効率な接続管理
 - 📦 バッチ送信（逐次・並行）
-- 🎨 組み込みHTMLメールテンプレートエンジン
+- 🧪 送信テスト用ヘルパー（`createTestEmail`）
 - 🌐 環境変数からのゼロコンフィグ接続
 - 📮 Gmail / Outlook / SendGrid のプロバイダプリセット
 - ✅ メールアドレスバリデーション
@@ -41,14 +40,14 @@ compatibility_flags = ["nodejs_compat"]
 - [API リファレンス](#api-リファレンス)
 - [メールオプション](#メールオプション)
 - [送信結果 (SendResult)](#送信結果-sendresult)
-- [テンプレート](#テンプレート)
+- [テストヘルパー](#テストヘルパー)
 - [DSN（配信状態通知）](#dsn配信状態通知)
 - [エラーハンドリング](#エラーハンドリング)
 - [コネクションプール](#コネクションプール)
 - [バッチ送信](#バッチ送信)
 - [非同期リソース管理](#非同期リソース管理)
 - [メールアドレスバリデーション](#メールアドレスバリデーション)
-- [開発への参加](#開発への参加)
+- [制限事項](#制限事項)
 - [ライセンス](#ライセンス)
 
 ## インストール
@@ -407,111 +406,23 @@ console.log(`拒否: ${result.rejected.join(", ")}`)
 console.log(`応答時間: ${result.responseTime}ms`)
 ```
 
-## テンプレート
+## テストヘルパー
 
-### `EmailTemplate` — 組み込みテンプレート
-
-よく使うメールパターン用の組み込みテンプレートが用意されています。レスポンシブ対応でダークモードもサポートします。
+`createTestEmail()` は、SMTP接続の動作確認用メールを生成します。
 
 ```typescript
-import { EmailTemplate } from "worker-mailer"
+import { createTestEmail } from "worker-mailer"
 
-// 確認コードメール
-const verificationHtml = EmailTemplate.verification({
-  title: "メールアドレスの確認",
-  message: "以下のコードを入力して、メールアドレスを確認してください。",
-  code: "123456",
-  brandName: "My App",
-  brandColor: "#5865F2",
-  footer: "© 2024 My App",
+const testEmail = createTestEmail({
+  from: "sender@example.com",
+  to: "recipient@example.com",
+  smtpHost: "smtp.gmail.com", // 省略可 — メール本文に表示
 })
 
-// パスワードリセットメール
-const resetHtml = EmailTemplate.passwordReset({
-  title: "パスワードリセット",
-  message: "パスワードリセットのリクエストを受け付けました。以下のボタンをクリックしてください。",
-  buttonText: "パスワードをリセット",
-  buttonUrl: "https://example.com/reset?token=xxx",
-  expiresIn: "30分",
-  brandName: "My App",
-})
-
-// 通知メール
-const notificationHtml = EmailTemplate.notification({
-  title: "新しいコメント",
-  message: "あなたの投稿にコメントがつきました。",
-  actions: [
-    { text: "コメントを見る", url: "https://example.com/comments/1" },
-  ],
-  brandName: "My App",
-})
-
-// シンプルなテキストメール
-const simpleHtml = EmailTemplate.simple({
-  title: "お知らせ",
-  body: "サービスのメンテナンスを実施します。\n詳細は以下をご確認ください。",
-  brandName: "My App",
-})
-
-// テンプレートで生成したHTMLをメール送信に使用
-await mailer.send({
-  from: "noreply@example.com",
-  to: "user@example.com",
-  subject: "メールアドレスの確認",
-  html: verificationHtml,
-})
+await mailer.send(testEmail)
 ```
 
-### `baseLayout` — カスタムレイアウト
-
-テンプレートの基盤となるレイアウト関数を直接使って、独自のメール本文を構築できます。
-
-```typescript
-import { baseLayout, escapeHtml } from "worker-mailer"
-
-const customHtml = baseLayout(
-  "カスタムメール",
-  `<h1>${escapeHtml("ご案内")}</h1><p>${escapeHtml("本文テキスト")}</p>`,
-  {
-    brandName: "My App",
-    brandColor: "#FF6600",
-    logoUrl: "https://example.com/logo.png",
-    footer: "© 2024 My App. All rights reserved.",
-  },
-)
-```
-
-### `html` テンプレートタグ
-
-タグ付きテンプレートリテラルで、メールクライアント互換のHTMLを簡潔に記述できます。挿入値は自動的にHTMLエスケープされます。
-
-```typescript
-import { html } from "worker-mailer"
-
-const title = "ようこそ"
-const message = "アカウント登録が完了しました。"
-const url = "https://example.com/dashboard"
-
-const emailHtml = html`
-  <heading>${title}</heading>
-  <text>${message}</text>
-  <button href="${url}">ダッシュボードへ</button>
-  <divider />
-  <text>ご不明な点がございましたらお気軽にお問い合わせください。</text>
-  <spacer />
-`
-```
-
-#### 使用可能なタグ
-
-| タグ | 説明 |
-|---|---|
-| `<heading>...</heading>` | 見出し（`<h1>` に変換） |
-| `<text>...</text>` | 段落テキスト（`<p>` に変換） |
-| `<bold>...</bold>` | 太字（`<strong>` に変換） |
-| `<button href="URL">...</button>` | CTAボタン（スタイル付きリンク） |
-| `<divider />` | 区切り線（`<hr>` に変換） |
-| `<spacer />` | 垂直スペーサー（20px） |
+生成されるメールにはタイムスタンプと接続情報が含まれ、配信成功をひと目で確認できます。
 
 ## DSN（配信状態通知）
 
@@ -769,43 +680,14 @@ type ValidationResult =
   | { valid: false; reason: string }
 ```
 
-## 開発への参加
-
-大きな変更を提案する場合は、まず Issue を作成して議論してください。
-
-### 開発ワークフロー
-
-1. リポジトリをフォーク & クローン
-2. 依存関係をインストール:
-   ```bash
-   bun install
-   ```
-3. `develop` ブランチから新しいブランチを作成:
-   ```bash
-   git checkout -b feat/your-feature-name
-   ```
-4. 変更を実施し、テストを実行:
-   ```bash
-   bunx vitest run
-   ```
-5. ビルドの確認:
-   ```bash
-   bun run build
-   ```
-6. コード品質チェック:
-   ```bash
-   bun run check
-   ```
-7. 必要に応じて変更履歴を追加:
-   ```bash
-   bunx changeset
-   ```
-8. フォークにプッシュし、`develop` ブランチへのプルリクエストを作成
-
-### 制限事項
+## 制限事項
 
 - **ポート制限:** Cloudflare Workers はポート25への送信接続ができません。ポート587や465を使用してください。
 - **接続数制限:** 各Workerインスタンスには同時TCP接続数の上限があります。使用後は必ず接続を閉じてください。
+
+## 謝辞
+
+本プロジェクトは [zou-yu/worker-mailer](https://github.com/zou-yu/worker-mailer) のフォークです。Cloudflare Workers 上でのSMTP実装の基盤を構築してくださったオリジナルの開発者に感謝いたします。
 
 ## ライセンス
 

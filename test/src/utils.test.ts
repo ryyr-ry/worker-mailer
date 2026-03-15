@@ -76,6 +76,12 @@ describe("BlockingQueue", () => {
 		await expect(promise).rejects.toThrow("Queue is closed")
 	})
 
+	it("closedゲッターがclose()前後で正しい値を返すこと", () => {
+		expect(queue.closed).toBe(false)
+		queue.close()
+		expect(queue.closed).toBe(true)
+	})
+
 	it("close()後にenqueue()がthrowすること", () => {
 		queue.close()
 		expect(() => queue.enqueue(1)).toThrow("Queue is closed")

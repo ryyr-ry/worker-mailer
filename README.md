@@ -2,7 +2,6 @@
 
 [English](./README.md) | [日本語](./README_ja.md)
 
-[![npm version](https://badge.fury.io/js/worker-mailer.svg)](https://badge.fury.io/js/worker-mailer)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A lightweight, zero-dependency SMTP mailer for **Cloudflare Workers**.
@@ -18,7 +17,7 @@ Built entirely on the [`cloudflare:sockets`](https://developers.cloudflare.com/w
 - 🏷️ **Provider presets** — Gmail, Outlook, SendGrid one-liners
 - 📦 **Batch sending** — `sendBatch()` with concurrency control and error handling
 - 🔄 **Connection pool** — `WorkerMailerPool` with round-robin distribution
-- 🎨 **HTML email templates** — built-in `EmailTemplate` helpers and `html` template literal tag
+- 🧪 **Test helper** — `createTestEmail()` for quick SMTP setup verification
 - ✅ **Email validation** — `validateEmail()` and `validateEmailBatch()`
 - 📬 **DSN (Delivery Status Notification)** — connection-level and per-email overrides
 - 🔁 **Auto-reconnect & retries** — `autoReconnect` and `maxRetries` options
@@ -305,92 +304,23 @@ type SendResult = {
 }
 ```
 
-## Templates
+## Test Helper
 
-### Built-in Templates (`EmailTemplate`)
-
-Four ready-made, responsive HTML email templates with dark-mode support:
+`createTestEmail()` generates a ready-to-send email for verifying your SMTP setup:
 
 ```typescript
-import { EmailTemplate } from "worker-mailer"
+import { createTestEmail } from "worker-mailer"
 
-// Email verification with a code
-const verifyHtml = EmailTemplate.verification({
-  title: "Verify Your Email",
-  message: "Enter the code below to verify your account.",
-  code: "847293",
-  brandName: "Acme",
-  brandColor: "#5865F2",
+const testEmail = createTestEmail({
+  from: "sender@example.com",
+  to: "recipient@example.com",
+  smtpHost: "smtp.gmail.com", // optional — shown in the email body
 })
 
-// Password reset with a button
-const resetHtml = EmailTemplate.passwordReset({
-  title: "Reset Your Password",
-  message: "Click the button below to reset your password.",
-  buttonText: "Reset Password",
-  buttonUrl: "https://example.com/reset?token=abc123",
-  expiresIn: "1 hour",
-})
-
-// Notification with action buttons
-const notifyHtml = EmailTemplate.notification({
-  title: "New Comment",
-  message: "Someone commented on your post.",
-  actions: [
-    { text: "View Comment", url: "https://example.com/post/1#comment" },
-  ],
-})
-
-// Simple text email
-const simpleHtml = EmailTemplate.simple({
-  title: "Welcome",
-  body: "Thanks for joining us!",
-})
+await mailer.send(testEmail)
 ```
 
-All templates accept `EmailTemplateOptions` for branding:
-
-```typescript
-type EmailTemplateOptions = {
-  brandName?: string   // Displayed in the header
-  brandColor?: string  // Header background & button color (default: "#5865F2")
-  footer?: string      // Footer text
-  logoUrl?: string     // Logo image URL in the header
-}
-```
-
-You can also use `baseLayout(title, htmlContent, options?)` to wrap any custom HTML content in the same responsive shell.
-
-### `html` Template Literal Tag
-
-Build custom HTML emails with a concise DSL. Interpolated values are automatically XSS-escaped:
-
-```typescript
-import { html } from "worker-mailer"
-
-const name = "Alice"
-const url = "https://example.com/verify"
-
-const emailHtml = html`
-  <heading>Welcome, ${name}!</heading>
-  <text>Thanks for creating an account. Please verify your email address.</text>
-  <divider />
-  <button href="${url}">Verify Email</button>
-  <spacer />
-  <text>If you didn't create this account, you can ignore this email.</text>
-`
-```
-
-Supported tags:
-
-| Tag | Output |
-|---|---|
-| `<heading>…</heading>` | Styled `<h1>` |
-| `<text>…</text>` | Styled `<p>` |
-| `<bold>…</bold>` | `<strong>` |
-| `<button href="url">…</button>` | Styled link button |
-| `<divider />` | Horizontal rule |
-| `<spacer />` | Vertical spacing |
+The generated email includes a timestamp and connection details so you can confirm delivery at a glance.
 
 ## DSN (Delivery Status Notification)
 
@@ -566,8 +496,8 @@ type WorkerMailerOptions = {
     RET?: { HEADERS?: boolean; FULL?: boolean }
     NOTIFY?: { DELAY?: boolean; FAILURE?: boolean; SUCCESS?: boolean }
   }
-  socketTimeoutMs?: number              // Socket timeout in ms (default: 10000)
-  responseTimeoutMs?: number            // SMTP response timeout in ms (default: 10000)
+  socketTimeoutMs?: number              // Socket timeout in ms (default: 60000)
+  responseTimeoutMs?: number            // SMTP response timeout in ms (default: 30000)
   ehloHostname?: string                 // Custom EHLO hostname (default: host)
   maxRetries?: number                   // Retry count on failure (default: 3)
   autoReconnect?: boolean               // Auto-reconnect on disconnect (default: false)
@@ -580,46 +510,9 @@ type WorkerMailerOptions = {
 - **Port 25 is blocked:** Cloudflare Workers cannot make outbound connections on port 25. Use port 587 or 465 instead.
 - **Connection limits:** Each Worker instance has a limit on concurrent TCP connections. Close connections when done, or use `await using` for automatic cleanup.
 
-## Contributing
+## Acknowledgements
 
-> For major changes, please open an issue first to discuss what you would like to change.
-
-1. Fork and clone the repository
-2. Install dependencies:
-   ```bash
-   bun install
-   ```
-3. Create a branch from `develop`:
-   ```bash
-   git checkout -b feat/your-feature-name
-   ```
-4. Run tests:
-   ```bash
-   bunx vitest run
-   ```
-5. Build:
-   ```bash
-   bun run build
-   ```
-6. Lint & format:
-   ```bash
-   bun run check
-   ```
-7. Add a changeset if your change affects the public API:
-   ```bash
-   bunx changeset
-   ```
-8. Push and open a pull request to `develop`
-
-### Reporting Issues
-
-When reporting issues, please include:
-
-- `worker-mailer` version
-- A clear description of the problem
-- Steps to reproduce
-- Expected vs actual behavior
-- Relevant code snippets or error messages
+This project is a fork of [zou-yu/worker-mailer](https://github.com/zou-yu/worker-mailer). Thanks to the original author for the foundational SMTP implementation on Cloudflare Workers.
 
 ## License
 
