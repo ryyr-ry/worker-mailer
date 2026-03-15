@@ -216,6 +216,71 @@ describe("WorkerMailer", () => {
 			expect((mailer as unknown as { responseTimeoutMs: number }).responseTimeoutMs).toBe(15_000)
 			await mailer.close()
 		})
+
+		it("should use custom ehloHostname in EHLO command", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain", "login"],
+				ehloHostname: "mail.atchecks.com",
+			})
+
+			const ehloCall = mockWriter.write.mock.calls.find(([arg]: [Uint8Array]) => {
+				const str = Buffer.from(arg).toString()
+				return str.startsWith("EHLO")
+			})
+			expect(ehloCall).toBeDefined()
+			const ehloStr = Buffer.from((ehloCall as [Uint8Array])[0]).toString()
+			expect(ehloStr).toContain("EHLO mail.atchecks.com")
+
+			await mailer.close()
+		})
+
+		it("should default ehloHostname to host option", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain", "login"],
+			})
+
+			const ehloCall = mockWriter.write.mock.calls.find(([arg]: [Uint8Array]) => {
+				const str = Buffer.from(arg).toString()
+				return str.startsWith("EHLO")
+			})
+			expect(ehloCall).toBeDefined()
+			const ehloStr = Buffer.from((ehloCall as [Uint8Array])[0]).toString()
+			expect(ehloStr).toContain("EHLO smtp.example.com")
+
+			await mailer.close()
+		})
 	})
 
 	describe("server capabilities", () => {
