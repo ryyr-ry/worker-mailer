@@ -523,6 +523,55 @@ describe("Email", () => {
 			})
 			expect(email.from.email).toBe("sender@example.com")
 		})
+		it("should reject attachment filenames with double quotes", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "recipient@example.com",
+						subject: "test",
+						text: "test",
+						attachments: [
+							{
+								filename: 'evil".txt',
+								content: "data",
+							},
+						],
+					}),
+			).toThrow(/Invalid attachment filename/)
+		})
+
+		it("should reject attachment filenames with CRLF", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "recipient@example.com",
+						subject: "test",
+						text: "test",
+						attachments: [
+							{
+								filename: "evil\r\nContent-Type: text/html",
+								content: "data",
+							},
+						],
+					}),
+			).toThrow(/Invalid attachment filename/)
+		})
+
+		it("should accept safe attachment filenames", () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "test",
+				text: "test",
+				attachments: [
+					{ filename: "report-2024.pdf", content: "data" },
+					{ filename: "日本語ファイル.txt", content: "data" },
+				],
+			})
+			expect(email.attachments).toHaveLength(2)
+		})
 	})
 })
 

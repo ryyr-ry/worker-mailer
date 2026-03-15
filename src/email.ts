@@ -126,6 +126,7 @@ export class Email {
 
 		this.validateNoCRLF()
 		this.validateEmailAddresses()
+		this.validateAttachmentFilenames()
 	}
 
 	private static readonly CRLF_PATTERN = /[\r\n]/
@@ -166,6 +167,19 @@ export class Email {
 	private validateEmail(email: string, field: string) {
 		if (!Email.EMAIL_PATTERN.test(email)) {
 			throw new Error(`Invalid email address in ${field}: ${email}`)
+		}
+	}
+
+	private static readonly UNSAFE_FILENAME_PATTERN = /[\r\n"]/
+
+	private validateAttachmentFilenames() {
+		if (!this.attachments) return
+		for (const attachment of this.attachments) {
+			if (Email.UNSAFE_FILENAME_PATTERN.test(attachment.filename)) {
+				throw new Error(
+					`Invalid attachment filename: ${attachment.filename.replaceAll(/[\r\n]/g, "?")}`,
+				)
+			}
 		}
 	}
 
