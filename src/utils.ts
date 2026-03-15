@@ -43,6 +43,16 @@ const encoder = new TextEncoder()
 export function encode(data: string): Uint8Array {
 	return encoder.encode(data)
 }
+
+export function toBase64(data: string): string {
+	const bytes = encoder.encode(data)
+	let binary = ""
+	for (const byte of bytes) {
+		binary += String.fromCharCode(byte)
+	}
+	return btoa(binary)
+}
+
 const decoder = new TextDecoder("utf-8")
 export function decode(data: Uint8Array): string {
 	return decoder.decode(data)

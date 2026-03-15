@@ -1,6 +1,13 @@
 import * as libqp from "libqp"
 import { beforeEach, describe, expect, it } from "vitest"
-import { BlockingQueue, decode, encode, encodeQuotedPrintable, execTimeout } from "../../src/utils"
+import {
+	BlockingQueue,
+	decode,
+	encode,
+	encodeQuotedPrintable,
+	execTimeout,
+	toBase64,
+} from "../../src/utils"
 
 describe("BlockingQueue", () => {
 	let queue: BlockingQueue<number>
@@ -86,6 +93,41 @@ describe("encode/decode", () => {
 		const decoded = decode(encoded)
 
 		expect(decoded).toBe(original)
+	})
+})
+
+describe("toBase64", () => {
+	it("should encode ASCII strings correctly", () => {
+		expect(toBase64("Hello")).toBe(btoa("Hello"))
+		expect(toBase64("user:pass")).toBe(btoa("user:pass"))
+	})
+
+	it("should encode strings with null bytes (SMTP AUTH PLAIN)", () => {
+		const plain = "\u0000username\u0000password"
+		expect(toBase64(plain)).toBe(btoa(plain))
+	})
+
+	it("should handle UTF-8 characters without throwing", () => {
+		expect(() => toBase64("日本語ユーザー")).not.toThrow()
+		const result = toBase64("日本語ユーザー")
+		expect(typeof result).toBe("string")
+		expect(result.length).toBeGreaterThan(0)
+	})
+
+	it("should correctly round-trip UTF-8 via atob+TextDecoder", () => {
+		const original = "tëst pässwörd 日本語"
+		const encoded = toBase64(original)
+		const binary = atob(encoded)
+		const bytes = new Uint8Array(binary.length)
+		for (let i = 0; i < binary.length; i++) {
+			bytes[i] = binary.charCodeAt(i)
+		}
+		const decoded = new TextDecoder().decode(bytes)
+		expect(decoded).toBe(original)
+	})
+
+	it("should handle empty string", () => {
+		expect(toBase64("")).toBe("")
 	})
 })
 

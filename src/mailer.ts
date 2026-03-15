@@ -1,7 +1,7 @@
 import { connect } from "cloudflare:sockets"
 import { Email, type EmailOptions } from "./email"
 import Logger, { type LogLevel } from "./logger"
-import { BlockingQueue, decode, encode, execTimeout } from "./utils"
+import { BlockingQueue, decode, encode, execTimeout, toBase64 } from "./utils"
 
 export type AuthType = "plain" | "login" | "cram-md5"
 export type Credentials = {
@@ -333,7 +333,7 @@ export class WorkerMailer {
 	}
 
 	private async authWithPlain() {
-		const userPassBase64 = btoa(
+		const userPassBase64 = toBase64(
 			`\u0000${this.credentials?.username}\u0000${this.credentials?.password}`,
 		)
 		await this.writeLine(`AUTH PLAIN ${userPassBase64}`)
@@ -350,14 +350,14 @@ export class WorkerMailer {
 			throw new Error(`Invalid login: ${startLoginResponse}`)
 		}
 
-		const usernameBase64 = btoa(this.credentials?.username)
+		const usernameBase64 = toBase64(this.credentials?.username ?? "")
 		await this.writeLine(usernameBase64)
 		const userResponse = await this.readTimeout()
 		if (!userResponse.startsWith("3")) {
 			throw new Error(`Failed to login authentication: ${userResponse}`)
 		}
 
-		const passwordBase64 = btoa(this.credentials?.password)
+		const passwordBase64 = toBase64(this.credentials?.password ?? "")
 		await this.writeLine(passwordBase64)
 		const authResult = await this.readTimeout()
 		if (!authResult.startsWith("2")) {
@@ -377,7 +377,7 @@ export class WorkerMailer {
 		const challenge = atob(challengeWithBase64Encoded)
 
 		// Import password as key
-		const keyData = encode(this.credentials?.password)
+		const keyData = encode(this.credentials?.password ?? "")
 		const key = await crypto.subtle.importKey(
 			"raw",
 			keyData,
@@ -395,7 +395,7 @@ export class WorkerMailer {
 			.map((b) => b.toString(16).padStart(2, "0"))
 			.join("")
 
-		await this.writeLine(btoa(`${this.credentials?.username} ${challengeSolved}`))
+		await this.writeLine(toBase64(`${this.credentials?.username} ${challengeSolved}`))
 		const authResult = await this.readTimeout()
 		if (!authResult.startsWith("2")) {
 			throw new Error(`Failed to cram-md5 authentication: ${authResult}`)
