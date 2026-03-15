@@ -310,8 +310,11 @@ describe("Email", () => {
 			})
 
 			const emailData = email.getEmailData()
-			// Extract the To header from the raw email data
-			const toHeader = emailData.split("\r\n").find((line) => line.toLowerCase().startsWith("to:"))
+			const headerSection = emailData.split("\r\n\r\n")[0]
+			const unfoldedHeaders = headerSection.replaceAll(/\r\n[ \t]/g, " ")
+			const toHeader = unfoldedHeaders
+				.split("\r\n")
+				.find((line) => line.toLowerCase().startsWith("to:"))
 			expect(toHeader).toBeDefined()
 			expect(toHeader).toContain("=?UTF-8?Q?J=C3=B6rg_Schmidt?=")
 			expect(toHeader).toContain("=?UTF-8?Q?Fran=C3=A7ois_Dupont?=")
@@ -571,6 +574,40 @@ describe("Email", () => {
 				],
 			})
 			expect(email.attachments).toHaveLength(2)
+		})
+	})
+
+	describe("header line folding (RFC 5322 §2.1.1)", () => {
+		it("should fold long To header lines at 78 characters", () => {
+			const manyRecipients = Array.from({ length: 10 }, (_, i) => `user${i}@example.com`)
+			const email = new Email({
+				from: "sender@example.com",
+				to: manyRecipients,
+				subject: "test",
+				text: "test",
+			})
+			const data = email.getEmailData()
+			const headerSection = data.split("\r\n\r\n")[0]
+			const lines = headerSection.split("\r\n")
+			for (const line of lines) {
+				expect(line.length).toBeLessThanOrEqual(78)
+			}
+		})
+
+		it("should not exceed 998 characters per line (absolute RFC limit)", () => {
+			const longName = "A".repeat(200)
+			const email = new Email({
+				from: { name: longName, email: "sender@example.com" },
+				to: "recipient@example.com",
+				subject: "test",
+				text: "test",
+			})
+			const data = email.getEmailData()
+			const headerSection = data.split("\r\n\r\n")[0]
+			const lines = headerSection.split("\r\n")
+			for (const line of lines) {
+				expect(line.length).toBeLessThanOrEqual(78)
+			}
 		})
 	})
 })

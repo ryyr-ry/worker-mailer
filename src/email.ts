@@ -195,6 +195,35 @@ export class Email {
 		}
 	}
 
+	private static foldHeaderLine(line: string, maxLen = 78): string {
+		if (line.length <= maxLen) return line
+
+		const parts: string[] = []
+		let remaining = line
+
+		while (remaining.length > maxLen) {
+			let splitAt = -1
+			for (let i = maxLen - 1; i > 0; i--) {
+				if (remaining[i] === " " || remaining[i] === "\t" || remaining[i] === ",") {
+					splitAt = remaining[i] === "," ? i + 1 : i
+					break
+				}
+			}
+			if (splitAt <= 0) {
+				splitAt = maxLen
+			}
+			parts.push(remaining.slice(0, splitAt))
+			remaining = remaining.slice(splitAt)
+			if (remaining.length > 0 && remaining[0] !== " " && remaining[0] !== "\t") {
+				remaining = ` ${remaining}`
+			}
+		}
+		if (remaining.length > 0) {
+			parts.push(remaining)
+		}
+		return parts.join("\r\n")
+	}
+
 	private static toUsers(user: string | string[] | User | User[] | undefined): User[] | undefined {
 		if (!user) {
 			return
@@ -218,12 +247,14 @@ export class Email {
 
 		const headersArray: string[] = ["MIME-Version: 1.0"]
 		for (const [key, value] of Object.entries(this.headers)) {
-			headersArray.push(`${key}: ${value}`)
+			headersArray.push(Email.foldHeaderLine(`${key}: ${value}`))
 		}
 		const mixedBoundary = this.generateSafeBoundary("mixed_")
 		const alternativeBoundary = this.generateSafeBoundary("alternative_")
 
-		headersArray.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`)
+		headersArray.push(
+			Email.foldHeaderLine(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`),
+		)
 		const headers = headersArray.join("\r\n")
 
 		let emailData = `${headers}\r\n\r\n`
