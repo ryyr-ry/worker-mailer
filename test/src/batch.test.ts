@@ -1,7 +1,7 @@
 import { connect } from "cloudflare:sockets"
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 import { sendBatch } from "../../src/batch"
-import type { EmailOptions } from "../../src/email"
+import type { EmailOptions } from "../../src/email/types"
 import { WorkerMailer } from "../../src/mailer"
 
 vi.mock("cloudflare:sockets", () => ({
@@ -69,7 +69,8 @@ describe("sendBatch", () => {
 	const connectionOptions = {
 		host: "smtp.example.com",
 		port: 587,
-		credentials: { username: "user", password: "pass" },
+		username: "user",
+		password: "pass",
 		authType: ["plain"] as const,
 		maxRetries: 0,
 	}
@@ -106,7 +107,7 @@ describe("sendBatch", () => {
 		vi.mocked(connect).mockReturnValue(mockSocket as unknown as ReturnType<typeof connect>)
 	})
 
-	it("複数メール送信が全成功するケース", async () => {
+	it("should succeed for all emails when sending multiple", async () => {
 		setupConnectionMocks()
 		setupSendSuccess()
 		setupSendSuccess()
@@ -131,16 +132,16 @@ describe("sendBatch", () => {
 		await mailer.close()
 	})
 
-	it("一部失敗するケース（continueOnError: true）", async () => {
+	it("should continue on partial failure (continueOnError: true)", async () => {
 		setupConnectionMocks()
-		// 1通目: 成功
+		// 1st email: success
 		setupSendSuccess()
-		// 2通目: MAIL FROM 失敗 + RSET成功
+		// 2nd email: MAIL FROM failure + RSET success
 		setupSendFailure()
 		mockReader.read.mockResolvedValueOnce({
 			value: new TextEncoder().encode("250 OK\r\n"),
 		})
-		// 3通目: 成功
+		// 3rd email: success
 		setupSendSuccess()
 		mockReader.read.mockResolvedValueOnce({
 			value: new TextEncoder().encode("221 Bye\r\n"),
@@ -162,11 +163,11 @@ describe("sendBatch", () => {
 		await mailer.close()
 	})
 
-	it("全停止するケース（continueOnError: false）", async () => {
+	it("should stop on failure (continueOnError: false)", async () => {
 		setupConnectionMocks()
-		// 1通目: 成功
+		// 1st email: success
 		setupSendSuccess()
-		// 2通目: MAIL FROM 失敗 + RSET成功
+		// 2nd email: MAIL FROM failure + RSET success
 		setupSendFailure()
 		mockReader.read.mockResolvedValueOnce({
 			value: new TextEncoder().encode("250 OK\r\n"),
@@ -188,7 +189,7 @@ describe("sendBatch", () => {
 		await mailer.close()
 	})
 
-	it("空リストのケース", async () => {
+	it("should handle an empty list", async () => {
 		setupConnectionMocks()
 		mockReader.read.mockResolvedValueOnce({
 			value: new TextEncoder().encode("221 Bye\r\n"),
@@ -203,7 +204,7 @@ describe("sendBatch", () => {
 		await mailer.close()
 	})
 
-	it("concurrency: 1 が逐次送信と同じ結果を返すこと", async () => {
+	it("should return the same results as sequential sending with concurrency: 1", async () => {
 		setupConnectionMocks()
 		setupSendSuccess()
 		setupSendSuccess()
@@ -226,7 +227,7 @@ describe("sendBatch", () => {
 		await mailer.close()
 	})
 
-	it("concurrency: 2 で複数メールが送信されること", async () => {
+	it("should send multiple emails with concurrency: 2", async () => {
 		setupConnectionMocks()
 		setupSendSuccess()
 		setupSendSuccess()
@@ -249,7 +250,7 @@ describe("sendBatch", () => {
 		await mailer.close()
 	})
 
-	it("concurrency がメール数を超える場合でも正常に動作すること", async () => {
+	it("should work correctly even when concurrency exceeds the number of emails", async () => {
 		setupConnectionMocks()
 		setupSendSuccess()
 		setupSendSuccess()
@@ -270,7 +271,7 @@ describe("sendBatch", () => {
 		await mailer.close()
 	})
 
-	it("concurrency 指定時に continueOnError: false で中断されること", async () => {
+	it("should abort on failure with continueOnError: false when concurrency is set", async () => {
 		setupConnectionMocks()
 		setupSendSuccess()
 		setupSendFailure()

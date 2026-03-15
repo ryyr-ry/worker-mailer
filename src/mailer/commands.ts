@@ -1,11 +1,14 @@
+import type { DsnOptions } from "../email/types"
 import type { SmtpTransport } from "./transport"
-import type { DsnOptions, SmtpCapabilities } from "./types"
+import type { SmtpCapabilities } from "./types"
+
+type DsnParam = Omit<DsnOptions, "envelopeId"> | DsnOptions
 
 export async function mailFrom(
 	transport: SmtpTransport,
 	fromEmail: string,
 	capabilities: SmtpCapabilities,
-	dsnGlobal?: DsnOptions,
+	dsnGlobal?: DsnParam,
 	dsnOverride?: DsnOptions,
 ): Promise<void> {
 	let message = `MAIL FROM: <${fromEmail}>`
@@ -26,7 +29,7 @@ export async function rcptTo(
 	transport: SmtpTransport,
 	recipients: ReadonlyArray<{ email: string }>,
 	capabilities: SmtpCapabilities,
-	dsnGlobal?: DsnOptions,
+	dsnGlobal?: DsnParam,
 	dsnOverride?: DsnOptions,
 ): Promise<void> {
 	for (const user of recipients) {
@@ -67,7 +70,7 @@ export async function rset(transport: SmtpTransport): Promise<void> {
 	}
 }
 
-export function buildNotify(dsnGlobal?: DsnOptions, dsnOverride?: DsnOptions): string {
+export function buildNotify(dsnGlobal?: DsnParam, dsnOverride?: DsnOptions): string {
 	const notifications: string[] = []
 	if (dsnOverride?.NOTIFY?.SUCCESS || (!dsnOverride?.NOTIFY && dsnGlobal?.NOTIFY?.SUCCESS)) {
 		notifications.push("SUCCESS")
@@ -81,7 +84,7 @@ export function buildNotify(dsnGlobal?: DsnOptions, dsnOverride?: DsnOptions): s
 	return notifications.length > 0 ? ` NOTIFY=${notifications.join(",")}` : " NOTIFY=NEVER"
 }
 
-export function buildRet(dsnGlobal?: DsnOptions, dsnOverride?: DsnOptions): string {
+export function buildRet(dsnGlobal?: DsnParam, dsnOverride?: DsnOptions): string {
 	const ret: string[] = []
 	if (dsnOverride?.RET?.HEADERS || (!dsnOverride?.RET && dsnGlobal?.RET?.HEADERS)) {
 		ret.push("HDRS")

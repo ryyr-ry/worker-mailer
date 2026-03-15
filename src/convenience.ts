@@ -14,7 +14,7 @@ function requireString(env: Record<string, unknown>, key: string): string {
 	const value = getString(env, key)
 	if (value === undefined || value === "") {
 		throw new Error(
-			`環境変数 ${key} が設定されていません。SMTP接続に必要な環境変数を確認してください。`,
+			`Environment variable ${key} is not set. Please check the required SMTP environment variables.`,
 		)
 	}
 	return value
@@ -54,7 +54,9 @@ export function fromEnv(env: Record<string, unknown>, prefix = "SMTP_"): WorkerM
 	const portStr = requireString(env, `${prefix}PORT`)
 	const port = Number.parseInt(portStr, 10)
 	if (Number.isNaN(port)) {
-		throw new Error(`環境変数 ${prefix}PORT の値 "${portStr}" は有効なポート番号ではありません。`)
+		throw new Error(
+			`Environment variable ${prefix}PORT value "${portStr}" is not a valid port number.`,
+		)
 	}
 
 	const user = getString(env, `${prefix}USER`)
@@ -72,7 +74,8 @@ export function fromEnv(env: Record<string, unknown>, prefix = "SMTP_"): WorkerM
 	if (secure !== undefined) options.secure = secure
 	if (startTls !== undefined) options.startTls = startTls
 	if (user !== undefined && pass !== undefined) {
-		options.credentials = { username: user, password: pass }
+		options.username = user
+		options.password = pass
 	}
 	if (authType !== undefined && authType.length > 0) options.authType = authType
 	if (ehloHostname !== undefined) options.ehloHostname = ehloHostname
@@ -105,44 +108,39 @@ export async function sendOnce(
 	}
 }
 
-function credentialsFromEnv(
-	env: Record<string, unknown>,
-): { username: string; password: string } | undefined {
+export type SmtpProvider = "gmail" | "outlook" | "sendgrid"
+
+const SMTP_HOSTS: Record<SmtpProvider, string> = {
+	gmail: "smtp.gmail.com",
+	outlook: "smtp.office365.com",
+	sendgrid: "smtp.sendgrid.net",
+}
+
+export function preset(provider: SmtpProvider, env: Record<string, unknown>): WorkerMailerOptions {
 	const user = getString(env, "SMTP_USER")
 	const pass = getString(env, "SMTP_PASS")
-	if (user === undefined || pass === undefined) return undefined
-	return { username: user, password: pass }
+	const options: WorkerMailerOptions = {
+		host: SMTP_HOSTS[provider],
+		port: 587,
+		secure: false,
+		startTls: true,
+		authType: ["plain"],
+	}
+	if (user !== undefined && pass !== undefined) {
+		options.username = user
+		options.password = pass
+	}
+	return options
 }
 
 export function gmailPreset(env: Record<string, unknown>): WorkerMailerOptions {
-	return {
-		host: "smtp.gmail.com",
-		port: 587,
-		secure: false,
-		startTls: true,
-		authType: ["plain"],
-		credentials: credentialsFromEnv(env),
-	}
+	return preset("gmail", env)
 }
 
 export function outlookPreset(env: Record<string, unknown>): WorkerMailerOptions {
-	return {
-		host: "smtp.office365.com",
-		port: 587,
-		secure: false,
-		startTls: true,
-		authType: ["plain"],
-		credentials: credentialsFromEnv(env),
-	}
+	return preset("outlook", env)
 }
 
 export function sendgridPreset(env: Record<string, unknown>): WorkerMailerOptions {
-	return {
-		host: "smtp.sendgrid.net",
-		port: 587,
-		secure: false,
-		startTls: true,
-		authType: ["plain"],
-		credentials: credentialsFromEnv(env),
-	}
+	return preset("sendgrid", env)
 }

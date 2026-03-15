@@ -56,10 +56,10 @@ describe("BlockingQueue", () => {
 		expect(queue.length).toBe(0)
 	})
 
-	it("clear()が待機中のPromiseをrejectすること", async () => {
+	it("should reject pending Promises on clear()", async () => {
 		const promise1 = queue.dequeue()
 		const promise2 = queue.dequeue()
-		// Unhandled Rejection 警告を抑制（別チェーンで catch）
+		// Suppress unhandled rejection warning (catch in separate chain)
 		promise1.catch(() => {})
 		promise2.catch(() => {})
 		queue.clear()
@@ -68,7 +68,7 @@ describe("BlockingQueue", () => {
 		await expect(promise2).rejects.toThrow("Queue was cleared")
 	})
 
-	it("close()が待機中のPromiseをrejectすること", async () => {
+	it("should reject pending Promises on close()", async () => {
 		const promise = queue.dequeue()
 		promise.catch(() => {})
 		queue.close()
@@ -76,18 +76,18 @@ describe("BlockingQueue", () => {
 		await expect(promise).rejects.toThrow("Queue is closed")
 	})
 
-	it("closedゲッターがclose()前後で正しい値を返すこと", () => {
+	it("should return correct values from closed getter before and after close()", () => {
 		expect(queue.closed).toBe(false)
 		queue.close()
 		expect(queue.closed).toBe(true)
 	})
 
-	it("close()後にenqueue()がthrowすること", () => {
+	it("should throw on enqueue() after close()", () => {
 		queue.close()
 		expect(() => queue.enqueue(1)).toThrow("Queue is closed")
 	})
 
-	it("close()後にdequeue()がrejectすること", async () => {
+	it("should reject on dequeue() after close()", async () => {
 		queue.close()
 		await expect(queue.dequeue()).rejects.toThrow("Queue is closed")
 	})
@@ -195,21 +195,21 @@ describe("encodeQuotedPrintable", () => {
 			const input = "a".repeat(100)
 			const result = encodeQuotedPrintable(input)
 
-			// RFC 2045 §6.7: 各行はソフトブレーク含めて76文字以下
+			// RFC 2045 §6.7: each line should be at most 76 characters including soft break
 			const lines = result.split("\r\n")
 			for (const line of lines) {
 				expect(line.length).toBeLessThanOrEqual(76)
 			}
 		})
 
-		it("76文字のASCIIはソフトブレークなしで1行に収まること", () => {
+		it("should fit 76 ASCII characters on a single line without soft break", () => {
 			const input = "a".repeat(76)
 			const result = encodeQuotedPrintable(input)
 			expect(result).toBe("a".repeat(76))
 			expect(result).not.toContain("=\r\n")
 		})
 
-		it("77文字のASCIIは1行目が76文字以下であること", () => {
+		it("should keep the first line at 76 characters or less for 77 ASCII characters", () => {
 			const input = "a".repeat(77)
 			const result = encodeQuotedPrintable(input)
 			expect(result).toContain("=\r\n")
@@ -223,7 +223,7 @@ describe("encodeQuotedPrintable", () => {
 			expect(decoded).toBe(input)
 		})
 
-		it("全ての行が76文字以下であること（汎用テスト）", () => {
+		it("should keep all lines at 76 characters or less (general test)", () => {
 			const inputs = [
 				"a".repeat(76),
 				"a".repeat(77),
@@ -478,12 +478,12 @@ describe("encodeQuotedPrintable", () => {
 		it("should handle exactly 76 characters", () => {
 			const input = "a".repeat(76)
 			const result = encodeQuotedPrintable(input)
-			// RFC 2045準拠: 76文字のASCIIはソフトブレークなしで1行に収まる
+			// RFC 2045 compliant: 76 ASCII characters fit on a single line without soft break
 			expect(result).toBe("a".repeat(76))
 			const decoded = libqp.decode(result).toString()
 			expect(decoded).toBe(input)
 
-			// RFC 2045 §6.7: 各行は76文字以下
+			// RFC 2045 §6.7: each line should be at most 76 characters
 			const lines = result.split("\r\n")
 			for (const line of lines) {
 				expect(line.length).toBeLessThanOrEqual(76)

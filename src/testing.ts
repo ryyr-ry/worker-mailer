@@ -1,4 +1,4 @@
-import type { EmailOptions } from "./email"
+import type { EmailOptions } from "./email/types"
 
 export type TestEmailOptions = {
 	from: string

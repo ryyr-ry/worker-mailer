@@ -7,37 +7,16 @@ export type Credentials = {
 	password: string
 }
 
-export type DsnOptions = {
-	envelopeId?: string
-	RET?: { HEADERS?: boolean; FULL?: boolean }
-	NOTIFY?: { DELAY?: boolean; FAILURE?: boolean; SUCCESS?: boolean }
-}
-
 export type WorkerMailerOptions = {
 	host: string
 	port: number
 	secure?: boolean
 	startTls?: boolean
-	credentials?: Credentials
-	authType?: AuthType | AuthType[]
+	username?: string
+	password?: string
+	authType?: AuthType[]
 	logLevel?: LogLevel
-	dsn?:
-		| {
-				RET?:
-					| {
-							HEADERS?: boolean
-							FULL?: boolean
-					  }
-					| undefined
-				NOTIFY?:
-					| {
-							DELAY?: boolean
-							FAILURE?: boolean
-							SUCCESS?: boolean
-					  }
-					| undefined
-		  }
-		| undefined
+	dsn?: Omit<import("../email/types").DsnOptions, "envelopeId">
 	socketTimeoutMs?: number
 	responseTimeoutMs?: number
 	ehloHostname?: string

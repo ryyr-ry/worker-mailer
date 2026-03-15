@@ -15,90 +15,90 @@ function containsControlChar(str: string): boolean {
 
 export function validateEmail(address: string): ValidationResult {
 	if (address === "") {
-		return { valid: false, reason: "メールアドレスが空です" }
+		return { valid: false, reason: "Email address is empty" }
 	}
 
 	if (address.length > MAX_TOTAL_LENGTH) {
 		return {
 			valid: false,
-			reason: `メールアドレスが長すぎます（${address.length}文字、上限${MAX_TOTAL_LENGTH}文字）`,
+			reason: `Email address is too long (${address.length} chars, max ${MAX_TOTAL_LENGTH})`,
 		}
 	}
 
 	if (containsControlChar(address)) {
-		return { valid: false, reason: "メールアドレスに制御文字が含まれています" }
+		return { valid: false, reason: "Email address contains control characters" }
 	}
 
 	const atIndex = address.lastIndexOf("@")
 	if (atIndex === -1) {
-		return { valid: false, reason: "メールアドレスに @ が含まれていません" }
+		return { valid: false, reason: "Email address does not contain @" }
 	}
 
 	const localPart = address.slice(0, atIndex)
 	const domainPart = address.slice(atIndex + 1)
 
 	if (localPart === "") {
-		return { valid: false, reason: "ローカル部分が空です" }
+		return { valid: false, reason: "Local part is empty" }
 	}
 
 	if (localPart.length > MAX_LOCAL_LENGTH) {
 		return {
 			valid: false,
-			reason: `ローカル部分が長すぎます（${localPart.length}文字、上限${MAX_LOCAL_LENGTH}文字）`,
+			reason: `Local part is too long (${localPart.length} chars, max ${MAX_LOCAL_LENGTH})`,
 		}
 	}
 
 	if (localPart.startsWith(".")) {
-		return { valid: false, reason: "ローカル部分がドットで始まっています" }
+		return { valid: false, reason: "Local part starts with a dot" }
 	}
 
 	if (localPart.endsWith(".")) {
-		return { valid: false, reason: "ローカル部分がドットで終わっています" }
+		return { valid: false, reason: "Local part ends with a dot" }
 	}
 
 	if (localPart.includes("..")) {
-		return { valid: false, reason: "ローカル部分に連続するドットが含まれています" }
+		return { valid: false, reason: "Local part contains consecutive dots" }
 	}
 
 	if (domainPart === "") {
-		return { valid: false, reason: "ドメイン部分が空です" }
+		return { valid: false, reason: "Domain part is empty" }
 	}
 
 	if (domainPart.length > MAX_DOMAIN_LENGTH) {
 		return {
 			valid: false,
-			reason: `ドメイン部分が長すぎます（${domainPart.length}文字、上限${MAX_DOMAIN_LENGTH}文字）`,
+			reason: `Domain part is too long (${domainPart.length} chars, max ${MAX_DOMAIN_LENGTH})`,
 		}
 	}
 
 	if (domainPart.startsWith(".")) {
-		return { valid: false, reason: "ドメイン部分がドットで始まっています" }
+		return { valid: false, reason: "Domain part starts with a dot" }
 	}
 
 	if (domainPart.endsWith(".")) {
-		return { valid: false, reason: "ドメイン部分がドットで終わっています" }
+		return { valid: false, reason: "Domain part ends with a dot" }
 	}
 
 	if (domainPart.includes("..")) {
-		return { valid: false, reason: "ドメイン部分に連続するドットが含まれています" }
+		return { valid: false, reason: "Domain part contains consecutive dots" }
 	}
 
 	if (!domainPart.includes(".")) {
 		return {
 			valid: false,
-			reason: "ドメイン部分にドットが含まれていません（TLDが必要です）",
+			reason: "Domain part does not contain a dot (TLD required)",
 		}
 	}
 
 	const labels = domainPart.split(".")
 	for (const label of labels) {
 		if (label === "") {
-			return { valid: false, reason: "ドメイン部分に空のラベルが含まれています" }
+			return { valid: false, reason: "Domain part contains an empty label" }
 		}
 		if (label.length > MAX_LABEL_LENGTH) {
 			return {
 				valid: false,
-				reason: `ドメインラベル "${label}" が長すぎます（${label.length}文字、上限${MAX_LABEL_LENGTH}文字）`,
+				reason: `Domain label "${label}" is too long (${label.length} chars, max ${MAX_LABEL_LENGTH})`,
 			}
 		}
 	}

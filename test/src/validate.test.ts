@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { validateEmail, validateEmailBatch } from "../../src/validate"
 
 describe("validateEmail", () => {
-	describe("正常なメールアドレス", () => {
+	describe("valid email addresses", () => {
 		const validAddresses = [
 			"user@example.com",
 			"test.user@example.com",
@@ -15,25 +15,25 @@ describe("validateEmail", () => {
 		]
 
 		for (const address of validAddresses) {
-			it(`"${address}" は有効`, () => {
+			it(`"${address}" should be valid`, () => {
 				const result = validateEmail(address)
 				expect(result.valid).toBe(true)
 			})
 		}
 	})
 
-	describe("空文字", () => {
-		it("空文字は無効", () => {
+	describe("empty string", () => {
+		it("should be invalid for empty string", () => {
 			const result = validateEmail("")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("空")
+				expect(result.reason).toContain("empty")
 			}
 		})
 	})
 
-	describe("@ が無い", () => {
-		it("@ が含まれないアドレスは無効", () => {
+	describe("missing @", () => {
+		it("should be invalid for address without @", () => {
 			const result = validateEmail("userexample.com")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
@@ -42,37 +42,37 @@ describe("validateEmail", () => {
 		})
 	})
 
-	describe("ローカル部分が空", () => {
-		it("@ の前が空は無効", () => {
+	describe("Local part is empty", () => {
+		it("should be invalid when local part before @ is empty", () => {
 			const result = validateEmail("@example.com")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("ローカル部分が空")
+				expect(result.reason).toContain("Local part is empty")
 			}
 		})
 	})
 
-	describe("ドメイン部分が空", () => {
-		it("@ の後が空は無効", () => {
+	describe("Domain part is empty", () => {
+		it("should be invalid when domain part after @ is empty", () => {
 			const result = validateEmail("user@")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("ドメイン部分が空")
+				expect(result.reason).toContain("Domain part is empty")
 			}
 		})
 	})
 
-	describe("長さ制限チェック", () => {
-		it("ローカル部分が64文字を超える場合は無効", () => {
+	describe("length limit checks", () => {
+		it("should be invalid when local part exceeds 64 characters", () => {
 			const local = "a".repeat(65)
 			const result = validateEmail(`${local}@example.com`)
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("ローカル部分が長すぎます")
+				expect(result.reason).toContain("Local part is too long")
 			}
 		})
 
-		it("ドメイン部分が253文字を超える場合は無効", () => {
+		it("should be invalid when domain part exceeds 253 characters", () => {
 			const labels: string[] = []
 			while (labels.join(".").length < 254) {
 				labels.push("a".repeat(63))
@@ -81,11 +81,11 @@ describe("validateEmail", () => {
 			const result = validateEmail(`user@${domain}`)
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("ドメイン部分が長すぎます")
+				expect(result.reason).toContain("Domain part is too long")
 			}
 		})
 
-		it("全体が320文字を超える場合は無効", () => {
+		it("should be invalid when total length exceeds 320 characters", () => {
 			const local = "a".repeat(64)
 			const domain = `${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(63)}.${"e".repeat(63)}`
 			const address = `${local}@${domain}`
@@ -97,108 +97,108 @@ describe("validateEmail", () => {
 		})
 	})
 
-	describe("制御文字チェック", () => {
-		it("制御文字を含むアドレスは無効", () => {
+	describe("control character checks", () => {
+		it("should be invalid for address containing control characters", () => {
 			const result = validateEmail("user\x00@example.com")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("制御文字")
+				expect(result.reason).toContain("control characters")
 			}
 		})
 
-		it("タブ文字を含むアドレスは無効", () => {
+		it("should be invalid for address containing tab characters", () => {
 			const result = validateEmail("user\t@example.com")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("制御文字")
+				expect(result.reason).toContain("control characters")
 			}
 		})
 	})
 
-	describe("ドットに関するチェック", () => {
-		it("ローカル部分がドットで始まる場合は無効", () => {
+	describe("dot-related checks", () => {
+		it("should be invalid when local part starts with a dot", () => {
 			const result = validateEmail(".user@example.com")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("ドットで始まっています")
+				expect(result.reason).toContain("starts with a dot")
 			}
 		})
 
-		it("ローカル部分がドットで終わる場合は無効", () => {
+		it("should be invalid when local part ends with a dot", () => {
 			const result = validateEmail("user.@example.com")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("ドットで終わっています")
+				expect(result.reason).toContain("ends with a dot")
 			}
 		})
 
-		it("ローカル部分に連続ドットがある場合は無効", () => {
+		it("should be invalid when local part contains consecutive dots", () => {
 			const result = validateEmail("user..name@example.com")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("連続するドット")
+				expect(result.reason).toContain("consecutive dots")
 			}
 		})
 
-		it("ドメイン部分がドットで始まる場合は無効", () => {
+		it("should be invalid when domain part starts with a dot", () => {
 			const result = validateEmail("user@.example.com")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("ドットで始まっています")
+				expect(result.reason).toContain("starts with a dot")
 			}
 		})
 
-		it("ドメイン部分がドットで終わる場合は無効", () => {
+		it("should be invalid when domain part ends with a dot", () => {
 			const result = validateEmail("user@example.com.")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("ドットで終わっています")
+				expect(result.reason).toContain("ends with a dot")
 			}
 		})
 
-		it("ドメイン部分に連続ドットがある場合は無効", () => {
+		it("should be invalid when domain part contains consecutive dots", () => {
 			const result = validateEmail("user@example..com")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("連続するドット")
+				expect(result.reason).toContain("consecutive dots")
 			}
 		})
 	})
 
-	describe("ドメインにドットがない場合", () => {
-		it("TLDのないドメインは無効", () => {
+	describe("domain without a dot", () => {
+		it("should be invalid for domain without TLD", () => {
 			const result = validateEmail("user@localhost")
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("ドットが含まれていません")
+				expect(result.reason).toContain("does not contain a dot")
 			}
 		})
 	})
 
-	describe("ドメインラベル長チェック", () => {
-		it("63文字を超えるラベルは無効", () => {
+	describe("domain label length checks", () => {
+		it("should be invalid for label exceeding 63 characters", () => {
 			const longLabel = "a".repeat(64)
 			const result = validateEmail(`user@${longLabel}.com`)
 			expect(result.valid).toBe(false)
 			if (!result.valid) {
-				expect(result.reason).toContain("長すぎます")
+				expect(result.reason).toContain("too long")
 			}
 		})
 
-		it("63文字ちょうどのラベルは有効", () => {
+		it("should be valid for label with exactly 63 characters", () => {
 			const label = "a".repeat(63)
 			const result = validateEmail(`user@${label}.com`)
 			expect(result.valid).toBe(true)
 		})
 	})
 
-	describe("国際化ドメイン名 (IDN)", () => {
-		it("日本語ドメインは許容される", () => {
+	describe("internationalized domain names (IDN)", () => {
+		it("should accept Japanese domain names", () => {
 			const result = validateEmail("user@例え.jp")
 			expect(result.valid).toBe(true)
 		})
 
-		it("中国語ドメインは許容される", () => {
+		it("should accept Chinese domain names", () => {
 			const result = validateEmail("user@例子.中国")
 			expect(result.valid).toBe(true)
 		})
@@ -206,7 +206,7 @@ describe("validateEmail", () => {
 })
 
 describe("validateEmailBatch", () => {
-	it("複数アドレスを一括バリデーションできる", () => {
+	it("should validate multiple addresses at once", () => {
 		const addresses = ["valid@example.com", "invalid", "another@test.org", ""]
 		const results = validateEmailBatch(addresses)
 
@@ -217,12 +217,12 @@ describe("validateEmailBatch", () => {
 		expect(results.get("")?.valid).toBe(false)
 	})
 
-	it("空配列の場合は空のMapを返す", () => {
+	it("should return an empty Map for an empty array", () => {
 		const results = validateEmailBatch([])
 		expect(results.size).toBe(0)
 	})
 
-	it("重複アドレスがある場合は最後の結果が保持される", () => {
+	it("should keep the last result for duplicate addresses", () => {
 		const results = validateEmailBatch(["user@example.com", "user@example.com"])
 		expect(results.size).toBe(1)
 		expect(results.get("user@example.com")?.valid).toBe(true)

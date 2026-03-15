@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { createTestEmail } from "../../src/testing"
 
 describe("createTestEmail", () => {
-	it("必須フィールドのみで有効なEmailOptionsを返す", () => {
+	it("should return valid EmailOptions with only required fields", () => {
 		const result = createTestEmail({
 			from: "sender@example.com",
 			to: "recipient@example.com",
@@ -17,7 +17,7 @@ describe("createTestEmail", () => {
 		expect(result.html).toContain("sender@example.com")
 	})
 
-	it("smtpHost指定時にSMTP情報が含まれる", () => {
+	it("should include SMTP info when smtpHost is specified", () => {
 		const result = createTestEmail({
 			from: "sender@example.com",
 			to: "recipient@example.com",
@@ -28,7 +28,7 @@ describe("createTestEmail", () => {
 		expect(result.html).toContain("smtp.gmail.com")
 	})
 
-	it("smtpHost未指定時にSMTP情報が含まれない", () => {
+	it("should not include SMTP info when smtpHost is not specified", () => {
 		const result = createTestEmail({
 			from: "sender@example.com",
 			to: "recipient@example.com",
@@ -38,7 +38,7 @@ describe("createTestEmail", () => {
 		expect(result.html).not.toContain("<p>SMTP:")
 	})
 
-	it("複数宛先を受け付ける", () => {
+	it("should accept multiple recipients", () => {
 		const result = createTestEmail({
 			from: "sender@example.com",
 			to: ["a@example.com", "b@example.com"],
@@ -47,7 +47,7 @@ describe("createTestEmail", () => {
 		expect(result.to).toEqual(["a@example.com", "b@example.com"])
 	})
 
-	it("HTMLにXSSエスケープが適用される", () => {
+	it("should apply XSS escaping in HTML", () => {
 		const result = createTestEmail({
 			from: '<script>alert("xss")</script>@example.com',
 			to: "recipient@example.com",
@@ -60,7 +60,7 @@ describe("createTestEmail", () => {
 		expect(result.html).toContain("&lt;img onerror=")
 	})
 
-	it("タイムスタンプがISO 8601形式", () => {
+	it("should format timestamps in ISO 8601", () => {
 		const result = createTestEmail({
 			from: "sender@example.com",
 			to: "recipient@example.com",
@@ -72,7 +72,7 @@ describe("createTestEmail", () => {
 		expect(result.html).toMatch(isoPattern)
 	})
 
-	it("生成されたHTMLが有効な構造を持つ", () => {
+	it("should have valid HTML structure in generated output", () => {
 		const result = createTestEmail({
 			from: "sender@example.com",
 			to: "recipient@example.com",

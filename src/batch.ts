@@ -1,4 +1,4 @@
-import type { EmailOptions } from "./email"
+import type { EmailOptions } from "./email/types"
 import type { WorkerMailer } from "./mailer"
 import type { SendResult } from "./result"
 

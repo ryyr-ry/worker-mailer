@@ -1,4 +1,5 @@
 import { encode } from "../utils"
+import type { User } from "./types"
 
 function isAsciiOnly(text: string): boolean {
 	for (let i = 0; i < text.length; i++) {
@@ -79,4 +80,59 @@ export function foldHeaderLine(line: string, maxLen = 78): string {
 		parts.push(remaining)
 	}
 	return parts.join("\r\n")
+}
+
+export function resolveHeaders(params: {
+	from: User
+	to: User[]
+	cc?: User[]
+	reply?: User
+	subject: string
+	headers: Record<string, string>
+}): void {
+	const { from, to, cc, reply, subject, headers } = params
+
+	if (!headers.From) {
+		let fromValue = from.email
+		if (from.name) {
+			fromValue = `"${encodeHeader(from.name)}" <${fromValue}>`
+		}
+		headers.From = fromValue
+	}
+
+	if (!headers.To) {
+		const toAddresses = to.map((user) => {
+			if (user.name) {
+				return `"${encodeHeader(user.name)}" <${user.email}>`
+			}
+			return user.email
+		})
+		headers.To = toAddresses.join(", ")
+	}
+
+	if (!headers["Reply-To"] && reply) {
+		let replyAddress = reply.email
+		if (reply.name) {
+			replyAddress = `"${encodeHeader(reply.name)}" <${replyAddress}>`
+		}
+		headers["Reply-To"] = replyAddress
+	}
+
+	if (!headers.CC && cc) {
+		const ccAddresses = cc.map((user) => {
+			if (user.name) {
+				return `"${encodeHeader(user.name)}" <${user.email}>`
+			}
+			return user.email
+		})
+		headers.CC = ccAddresses.join(", ")
+	}
+
+	if (!headers.Subject && subject) {
+		headers.Subject = encodeHeader(subject)
+	}
+
+	headers.Date = headers.Date ?? new Date().toUTCString()
+	headers["Message-ID"] =
+		headers["Message-ID"] ?? `<${crypto.randomUUID()}@${from.email.split("@").pop()}>`
 }

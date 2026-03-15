@@ -1,6 +1,9 @@
 import { extract } from "letterparser"
 import { describe, expect, it } from "vitest"
-import { Email, type EmailOptions, encodeHeader } from "../../src/email"
+import { Email } from "../../src/email/email"
+import { encodeHeader } from "../../src/email/header"
+import { applyDotStuffing } from "../../src/email/mime"
+import type { EmailOptions } from "../../src/email/types"
 import type { SendResult } from "../../src/result"
 
 describe("Email", () => {
@@ -50,7 +53,7 @@ describe("Email", () => {
 		})
 	})
 
-	describe("getEmailData", () => {
+	describe("getRawMessage", () => {
 		it("should generate correct email data with text content", () => {
 			const email = new Email({
 				from: "sender@example.com",
@@ -58,7 +61,7 @@ describe("Email", () => {
 				subject: "Test Subject",
 				text: "Hello World",
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			const msg = extract(data)
 			expect(msg.text).toBe("Hello World")
 			expect(msg.subject).toBe("Test Subject")
@@ -77,7 +80,7 @@ describe("Email", () => {
 				text: "Hello World",
 				html: "<p>Hello World</p>",
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			const msg = extract(data)
 			expect(msg.text).toBe("Hello World")
 			expect(msg.html).toBe("<p>Hello World</p>")
@@ -97,12 +100,10 @@ describe("Email", () => {
 				text: "Hello, this is a test email with a long text. ".repeat(50),
 				html: `<p>${"Hello, this is a test email with a long text. ".repeat(50)}</p>`,
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 
-			// Note: letterparser doesn't perform SMTP dot-unstuffing (that's done by SMTP servers)
-			// So we need to manually remove dot-stuffing before parsing to simulate what an SMTP server would do
-			const unstuffedData = data.replace(/\r\n\.\./g, "\r\n.")
-			const msg = extract(unstuffedData)
+			// getRawMessage returns pure RFC 5322 (no dot-stuffing)
+			const msg = extract(data)
 
 			// expect the text to be the same if linebreaks are removed (we are adding a space and removing all double spaces due to the way the text is wrapped)
 			expect(msg.text?.replace(/\n/g, " ").replaceAll("  ", " ")).toBe(
@@ -128,7 +129,7 @@ describe("Email", () => {
 				subject: "Test Subject",
 				text: "Hello World",
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			const msg = extract(data)
 			expect(msg.cc).toEqual([
 				{ address: "cc1@example.com", raw: "cc1@example.com" },
@@ -150,7 +151,7 @@ describe("Email", () => {
 				subject: "Test Subject",
 				text: "Hello World",
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			const msg = extract(data)
 			expect(msg.replyTo).toEqual([
 				{
@@ -171,7 +172,7 @@ describe("Email", () => {
 					"X-Custom-Header": "Custom Value",
 				},
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			// letterparser does not support headers yet
 			expect(data).toContain("X-Custom-Header: Custom Value")
 		})
@@ -195,7 +196,7 @@ describe("Email", () => {
 					"X-Custom-Header": "Custom Value",
 				},
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 
 			// Verify custom headers are preserved
 			expect(data).toContain("From: custom-from@example.com")
@@ -207,7 +208,7 @@ describe("Email", () => {
 			expect(data).toContain("X-Custom-Header: Custom Value")
 		})
 
-		it("should dot-stuff body lines starting with periods", () => {
+		it("should not include dot-stuffing or SMTP terminator in raw message", () => {
 			const email = new Email({
 				from: "sender@example.com",
 				to: "recipient@example.com",
@@ -215,15 +216,19 @@ describe("Email", () => {
 				text: ".\r\nLine two\r\n.Line three\r\n..Line four",
 			})
 
-			const data = email.getEmailData()
-			const terminatorIndex = data.lastIndexOf("\r\n.\r\n")
-			expect(terminatorIndex).toBeGreaterThan(0)
+			const data = email.getRawMessage()
+			// getRawMessage is pure RFC 5322 - no dot-stuffing, no \r\n.\r\n
+			expect(data).not.toMatch(/\r\n\.\r\n$/)
+		})
+	})
 
-			const body = data.slice(0, terminatorIndex)
-			expect(body).not.toContain("\r\n.\r\n")
-			expect(body).toContain("\r\n..\r\n")
-			expect(body).toContain("\r\n..Line three")
-			expect(body).toContain("\r\n...Line four")
+	describe("applyDotStuffing", () => {
+		it("should dot-stuff lines starting with periods", () => {
+			const input = "Header: value\r\n\r\n.\r\nLine two\r\n.Line three\r\n..Line four"
+			const result = applyDotStuffing(input)
+			expect(result).toContain("\r\n..\r\n")
+			expect(result).toContain("\r\n..Line three")
+			expect(result).toContain("\r\n...Line four")
 		})
 	})
 
@@ -258,7 +263,7 @@ describe("Email", () => {
 				text: "Test content",
 			})
 
-			const emailData = email.getEmailData()
+			const emailData = email.getRawMessage()
 			// Extract the From header from the raw email data
 			const fromHeader = emailData
 				.split("\r\n")
@@ -275,7 +280,7 @@ describe("Email", () => {
 				text: "Test content",
 			})
 
-			const emailData = email.getEmailData()
+			const emailData = email.getRawMessage()
 			// Extract the To header from the raw email data
 			const toHeader = emailData.split("\r\n").find((line) => line.toLowerCase().startsWith("to:"))
 			expect(toHeader).toBeDefined()
@@ -290,7 +295,7 @@ describe("Email", () => {
 				text: "Test content",
 			})
 
-			const emailData = email.getEmailData()
+			const emailData = email.getRawMessage()
 			// Extract the Subject header from the raw email data
 			const subjectHeader = emailData
 				.split("\r\n")
@@ -310,7 +315,7 @@ describe("Email", () => {
 				text: "Test content",
 			})
 
-			const emailData = email.getEmailData()
+			const emailData = email.getRawMessage()
 			const headerSection = emailData.split("\r\n\r\n")[0]
 			const unfoldedHeaders = headerSection.replaceAll(/\r\n[ \t]/g, " ")
 			const toHeader = unfoldedHeaders
@@ -339,7 +344,7 @@ describe("Email", () => {
 				},
 			],
 		})
-		const data = email.getEmailData()
+		const data = email.getRawMessage()
 		const msg = extract(data)
 		expect(msg.attachments).toEqual([
 			{
@@ -369,7 +374,7 @@ describe("Email", () => {
 	})
 
 	describe("sent promise", () => {
-		it("should resolve when setSent is called", async () => {
+		it("should resolve when setSentResult is called", async () => {
 			const email = new Email({
 				from: "sender@example.com",
 				to: "recipient@example.com",
@@ -377,7 +382,17 @@ describe("Email", () => {
 				text: "Hello World",
 			})
 
-			setTimeout(() => email.setSent(), 0)
+			setTimeout(
+				() =>
+					email.setSentResult({
+						messageId: email.headers["Message-ID"] ?? "",
+						accepted: [],
+						rejected: [],
+						responseTime: 0,
+						response: "",
+					}),
+				0,
+			)
 			await expect(email.sent).resolves.toBeUndefined()
 		})
 
@@ -447,7 +462,7 @@ describe("Email", () => {
 			await expect(email.sent).resolves.toBeUndefined()
 		})
 
-		it("should resolve via setSent() with default SendResult", async () => {
+		it("should resolve via setSentResult() with default SendResult", async () => {
 			const email = new Email({
 				from: "sender@example.com",
 				to: "recipient@example.com",
@@ -455,7 +470,17 @@ describe("Email", () => {
 				text: "Hello World",
 			})
 
-			setTimeout(() => email.setSent(), 0)
+			setTimeout(
+				() =>
+					email.setSentResult({
+						messageId: email.headers["Message-ID"] ?? "",
+						accepted: [],
+						rejected: [],
+						responseTime: 0,
+						response: "",
+					}),
+				0,
+			)
 			const result = await email.sentResult
 			expect(result.accepted).toEqual([])
 			expect(result.rejected).toEqual([])
@@ -530,7 +555,7 @@ describe("Email", () => {
 				text: "test",
 			})
 
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			expect(data).not.toContain("secret@example.com")
 			expect(data).not.toContain("hidden@example.com")
 			expect(data).not.toMatch(/BCC:/i)
@@ -545,7 +570,7 @@ describe("Email", () => {
 				text: "test",
 			})
 
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			expect(data).not.toContain("secret@example.com")
 			expect(data).not.toContain("Secret User")
 			expect(data).not.toMatch(/BCC:/i)
@@ -766,7 +791,7 @@ describe("Email", () => {
 					},
 				],
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			const msg = extract(data)
 			expect(msg.attachments).toHaveLength(1)
 			expect(msg.attachments?.[0].body).toBe("Hello")
@@ -787,7 +812,7 @@ describe("Email", () => {
 					},
 				],
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			const msg = extract(data)
 			expect(msg.attachments).toHaveLength(1)
 			expect(msg.attachments?.[0].body).toBe("Hello")
@@ -811,7 +836,7 @@ describe("Email", () => {
 					},
 				],
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			const msg = extract(data)
 			expect(msg.attachments).toHaveLength(2)
 			expect(msg.attachments?.[0].body).toBe("StringContent")
@@ -830,7 +855,7 @@ describe("Email", () => {
 				subject: "test",
 				text: "test",
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			const headerSection = data.split("\r\n\r\n")[0]
 			const lines = headerSection.split("\r\n")
 			for (const line of lines) {
@@ -846,7 +871,7 @@ describe("Email", () => {
 				subject: "test",
 				text: "test",
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			const headerSection = data.split("\r\n\r\n")[0]
 			const lines = headerSection.split("\r\n")
 			for (const line of lines) {
@@ -1176,7 +1201,7 @@ describe("encodeHeader", () => {
 				subject: "Test",
 				text: "body",
 			})
-			const data = email.getEmailData()
+			const data = email.getRawMessage()
 			expect(data).not.toContain("\r\r\n")
 			const msg = extract(data)
 			expect(msg.from?.address).toBe("sender@example.com")
@@ -1185,7 +1210,7 @@ describe("encodeHeader", () => {
 		it("should produce valid headers when encoded-words already contain CRLF folding", () => {
 			const veryLongName = "これはとても長い日本語の名前で複数のエンコードワードに分割されるテスト"
 			const encoded = encodeHeader(veryLongName)
-			// encodeHeader が複数ワードに分割していることを前提とする
+			// Assumes encodeHeader splits into multiple encoded-words
 			expect(encoded).toContain("\r\n ")
 
 			const email = new Email({
@@ -1194,9 +1219,9 @@ describe("encodeHeader", () => {
 				subject: "Test",
 				text: "body",
 			})
-			const data = email.getEmailData()
-			// 二重 CRLF がヘッダ内に混入しないこと
-			// ヘッダ部分のみ検証（最初の \r\n\r\n まで）
+			const data = email.getRawMessage()
+			// Ensure no double CRLF appears within headers
+			// Only verify header portion (up to first \r\n\r\n)
 			const headerSection = data.split("\r\n\r\n")[0]
 			expect(headerSection).not.toMatch(/\r\n\r\n/)
 			expect(headerSection).not.toContain("\r\r\n")
@@ -1210,7 +1235,7 @@ describe("encodeHeader", () => {
 			const words = result.split("\r\n ")
 			for (const word of words) {
 				expect(word).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
-				// encoded-word からペイロードを取り出しデコードする
+				// Extract payload from encoded-word and decode it
 				const payload = word.replace(/^=\?UTF-8\?Q\?/, "").replace(/\?=$/, "")
 				const bytes: number[] = []
 				let i = 0
@@ -1226,7 +1251,7 @@ describe("encodeHeader", () => {
 						i += 1
 					}
 				}
-				// 不正な UTF-8 バイトシーケンスがあると TextDecoder がエラーを投げる
+				// TextDecoder throws an error on invalid UTF-8 byte sequences
 				const decoder = new TextDecoder("utf-8", { fatal: true })
 				expect(() => decoder.decode(new Uint8Array(bytes))).not.toThrow()
 			}

@@ -15,7 +15,7 @@ vi.mock("cloudflare:sockets", () => ({
 
 describe("convenience", () => {
 	describe("fromEnv", () => {
-		it("必須変数のみでオプションを生成できる", () => {
+		it("should generate options with only required variables", () => {
 			const env = {
 				SMTP_HOST: "smtp.example.com",
 				SMTP_PORT: "587",
@@ -23,11 +23,11 @@ describe("convenience", () => {
 			const options = fromEnv(env)
 			expect(options.host).toBe("smtp.example.com")
 			expect(options.port).toBe(587)
-			expect(options.credentials).toBeUndefined()
+			expect(options.username).toBeUndefined()
 			expect(options.secure).toBeUndefined()
 		})
 
-		it("全変数を指定して正しくオプションを生成できる", () => {
+		it("should generate correct options with all variables specified", () => {
 			const env = {
 				SMTP_HOST: "smtp.example.com",
 				SMTP_PORT: "465",
@@ -43,10 +43,8 @@ describe("convenience", () => {
 			const options = fromEnv(env)
 			expect(options.host).toBe("smtp.example.com")
 			expect(options.port).toBe(465)
-			expect(options.credentials).toEqual({
-				username: "user@example.com",
-				password: "secret",
-			})
+			expect(options.username).toBe("user@example.com")
+			expect(options.password).toBe("secret")
 			expect(options.secure).toBe(true)
 			expect(options.startTls).toBe(false)
 			expect(options.authType).toEqual(["plain", "login"])
@@ -54,22 +52,22 @@ describe("convenience", () => {
 			expect(options.maxRetries).toBe(5)
 		})
 
-		it("SMTP_HOST が未設定の場合エラーをスローする", () => {
+		it("should throw error when SMTP_HOST is not set", () => {
 			const env = { SMTP_PORT: "587" }
 			expect(() => fromEnv(env)).toThrow("SMTP_HOST")
 		})
 
-		it("SMTP_PORT が未設定の場合エラーをスローする", () => {
+		it("should throw error when SMTP_PORT is not set", () => {
 			const env = { SMTP_HOST: "smtp.example.com" }
 			expect(() => fromEnv(env)).toThrow("SMTP_PORT")
 		})
 
-		it("SMTP_PORT が数値でない場合エラーをスローする", () => {
+		it("should throw error when SMTP_PORT is not a number", () => {
 			const env = { SMTP_HOST: "smtp.example.com", SMTP_PORT: "abc" }
-			expect(() => fromEnv(env)).toThrow("有効なポート番号")
+			expect(() => fromEnv(env)).toThrow("not a valid port number")
 		})
 
-		it("SMTP_SECURE の各値を正しくパースする", () => {
+		it("should parse SMTP_SECURE values correctly", () => {
 			for (const val of ["true", "1", "yes"]) {
 				const options = fromEnv({
 					SMTP_HOST: "h",
@@ -88,7 +86,7 @@ describe("convenience", () => {
 			}
 		})
 
-		it("SMTP_AUTH_TYPE から無効な値をフィルタする", () => {
+		it("should filter out invalid values from SMTP_AUTH_TYPE", () => {
 			const env = {
 				SMTP_HOST: "h",
 				SMTP_PORT: "25",
@@ -98,19 +96,19 @@ describe("convenience", () => {
 			expect(options.authType).toEqual(["plain", "login", "cram-md5"])
 		})
 
-		it("SMTP_LOG_LEVEL を正しくパースする", () => {
+		it("should parse SMTP_LOG_LEVEL correctly", () => {
 			const env = { SMTP_HOST: "h", SMTP_PORT: "25", SMTP_LOG_LEVEL: "error" }
 			const options = fromEnv(env)
 			expect(options.logLevel).toBeDefined()
 		})
 
-		it("credentials はユーザーとパスワード両方ある場合のみ設定される", () => {
+		it("should only set credentials when both user and password are provided", () => {
 			const envUserOnly = {
 				SMTP_HOST: "h",
 				SMTP_PORT: "25",
 				SMTP_USER: "user",
 			}
-			expect(fromEnv(envUserOnly).credentials).toBeUndefined()
+			expect(fromEnv(envUserOnly).username).toBeUndefined()
 
 			const envBoth = {
 				SMTP_HOST: "h",
@@ -118,64 +116,56 @@ describe("convenience", () => {
 				SMTP_USER: "user",
 				SMTP_PASS: "pass",
 			}
-			expect(fromEnv(envBoth).credentials).toEqual({
-				username: "user",
-				password: "pass",
-			})
+			expect(fromEnv(envBoth).username).toBe("user")
+			expect(fromEnv(envBoth).password).toBe("pass")
 		})
 	})
 
-	describe("プリセット関数", () => {
+	describe("preset functions", () => {
 		const env = {
 			SMTP_USER: "user@gmail.com",
 			SMTP_PASS: "app-password",
 		}
 
-		it("gmailPreset が正しい設定を返す", () => {
+		it("should return correct settings for gmailPreset", () => {
 			const options = gmailPreset(env)
 			expect(options.host).toBe("smtp.gmail.com")
 			expect(options.port).toBe(587)
 			expect(options.secure).toBe(false)
 			expect(options.startTls).toBe(true)
 			expect(options.authType).toEqual(["plain"])
-			expect(options.credentials).toEqual({
-				username: "user@gmail.com",
-				password: "app-password",
-			})
+			expect(options.username).toBe("user@gmail.com")
+			expect(options.password).toBe("app-password")
 		})
 
-		it("outlookPreset が正しい設定を返す", () => {
+		it("should return correct settings for outlookPreset", () => {
 			const options = outlookPreset(env)
 			expect(options.host).toBe("smtp.office365.com")
 			expect(options.port).toBe(587)
 			expect(options.secure).toBe(false)
 			expect(options.startTls).toBe(true)
-			expect(options.credentials).toEqual({
-				username: "user@gmail.com",
-				password: "app-password",
-			})
+			expect(options.username).toBe("user@gmail.com")
+			expect(options.password).toBe("app-password")
 		})
 
-		it("sendgridPreset が正しい設定を返す", () => {
+		it("should return correct settings for sendgridPreset", () => {
 			const options = sendgridPreset(env)
 			expect(options.host).toBe("smtp.sendgrid.net")
 			expect(options.port).toBe(587)
 			expect(options.secure).toBe(false)
 			expect(options.startTls).toBe(true)
-			expect(options.credentials).toEqual({
-				username: "user@gmail.com",
-				password: "app-password",
-			})
+			expect(options.username).toBe("user@gmail.com")
+			expect(options.password).toBe("app-password")
 		})
 
-		it("credentials 未設定時は undefined を返す", () => {
+		it("should return undefined when credentials are not set", () => {
 			const options = gmailPreset({})
-			expect(options.credentials).toBeUndefined()
+			expect(options.username).toBeUndefined()
 		})
 
-		it("SMTP_USER のみ設定時は credentials が undefined を返す", () => {
-			expect(gmailPreset({ SMTP_USER: "user" }).credentials).toBeUndefined()
-			expect(outlookPreset({ SMTP_PASS: "pass" }).credentials).toBeUndefined()
+		it("SMTP_USER only: username set but no password", () => {
+			expect(gmailPreset({ SMTP_USER: "user" }).username).toBeUndefined()
+			expect(outlookPreset({ SMTP_PASS: "pass" }).username).toBeUndefined()
 		})
 	})
 
@@ -203,7 +193,7 @@ describe("convenience", () => {
 			vi.mocked(connect).mockReturnValue(mockSocket as unknown as ReturnType<typeof connect>)
 		})
 
-		it("createFromEnv で WorkerMailer インスタンスを取得できる", async () => {
+		it("should obtain a WorkerMailer instance via createFromEnv", async () => {
 			mockReader.read
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("220 ready\r\n"),
@@ -234,7 +224,7 @@ describe("convenience", () => {
 			expect(connect).toHaveBeenCalled()
 		})
 
-		it("sendOnce で接続→送信→切断を実行できる", async () => {
+		it("should perform connect, send, and disconnect via sendOnce", async () => {
 			mockReader.read
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("220 ready\r\n"),
@@ -292,8 +282,8 @@ describe("convenience", () => {
 		})
 	})
 
-	describe("fromEnv prefix カスタマイズ", () => {
-		it("カスタムプレフィックスで環境変数を読み取れる", () => {
+	describe("fromEnv prefix customization", () => {
+		it("should read environment variables with a custom prefix", () => {
 			const env = {
 				MAIL_HOST: "smtp.custom.com",
 				MAIL_PORT: "465",
@@ -304,14 +294,12 @@ describe("convenience", () => {
 			const options = fromEnv(env, "MAIL_")
 			expect(options.host).toBe("smtp.custom.com")
 			expect(options.port).toBe(465)
-			expect(options.credentials).toEqual({
-				username: "custom-user",
-				password: "custom-pass",
-			})
+			expect(options.username).toBe("custom-user")
+			expect(options.password).toBe("custom-pass")
 			expect(options.secure).toBe(true)
 		})
 
-		it("デフォルトプレフィックスは SMTP_ のまま動作する", () => {
+		it("should work with default SMTP_ prefix", () => {
 			const env = {
 				SMTP_HOST: "smtp.example.com",
 				SMTP_PORT: "587",
@@ -321,7 +309,7 @@ describe("convenience", () => {
 			expect(options.port).toBe(587)
 		})
 
-		it("カスタムプレフィックスで必須変数未設定時にエラーをスローする", () => {
+		it("should throw error when required variable is missing with custom prefix", () => {
 			const env = { MAIL_HOST: "smtp.custom.com" }
 			expect(() => fromEnv(env, "MAIL_")).toThrow("MAIL_PORT")
 		})
@@ -351,7 +339,7 @@ describe("convenience", () => {
 			vi.mocked(connect).mockReturnValue(mockSocket as unknown as ReturnType<typeof connect>)
 		})
 
-		it("createFromEnv にカスタムプレフィックスを渡せる", async () => {
+		it("should accept a custom prefix in createFromEnv", async () => {
 			mockReader.read
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("220 ready\r\n"),
@@ -382,7 +370,7 @@ describe("convenience", () => {
 			expect(connect).toHaveBeenCalled()
 		})
 
-		it("sendOnce にカスタムプレフィックスを渡せる", async () => {
+		it("should accept a custom prefix in sendOnce", async () => {
 			mockReader.read
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("220 ready\r\n"),

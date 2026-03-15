@@ -74,10 +74,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain", "login"],
 			})
 
@@ -118,10 +116,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain", "login"],
 			})
 
@@ -157,10 +153,8 @@ describe("WorkerMailer", () => {
 				host: "smtp.example.com",
 				port: 465,
 				secure: true,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain", "login"],
 			})
 
@@ -206,7 +200,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain", "login"],
 				socketTimeoutMs: 120_000,
 				responseTimeoutMs: 15_000,
@@ -234,7 +229,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain", "login"],
 				ehloHostname: "mail.atchecks.com",
 			})
@@ -267,7 +263,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain", "login"],
 			})
 
@@ -310,10 +307,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain"],
 			})
 
@@ -339,10 +334,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain"],
 			})
 
@@ -371,10 +364,8 @@ describe("WorkerMailer", () => {
 			await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain"],
 			})
 
@@ -402,10 +393,8 @@ describe("WorkerMailer", () => {
 				WorkerMailer.connect({
 					host: "smtp.example.com",
 					port: 587,
-					credentials: {
-						username: "test@example.com",
-						password: "wrong",
-					},
+					username: "test@example.com",
+					password: "wrong",
 					authType: ["plain"],
 				}),
 			).rejects.toThrow("[WorkerMailer] PLAIN authentication failed")
@@ -445,10 +434,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain"],
 				dsn: {
 					RET: {
@@ -527,10 +514,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain"],
 				dsn: {
 					RET: {
@@ -613,10 +598,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain"],
 				dsn: {
 					RET: {
@@ -693,10 +676,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain"],
 			})
 
@@ -737,10 +718,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain"],
 				maxRetries: 0,
 			})
@@ -777,10 +756,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: {
-					username: "test@example.com",
-					password: "password",
-				},
+				username: "test@example.com",
+				password: "password",
 				authType: ["plain"],
 			})
 
@@ -809,7 +786,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain", "login"],
 				maxRetries: 0,
 			})
@@ -846,7 +824,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain", "login"],
 			})
 
@@ -879,7 +858,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain", "login"],
 			})
 
@@ -917,7 +897,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain", "login"],
 				maxRetries: 0,
 			})
@@ -957,7 +938,8 @@ describe("WorkerMailer", () => {
 			await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["cram-md5"],
 			})
 
@@ -985,7 +967,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 				maxRetries: 5,
 			})
@@ -1012,7 +995,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 			})
 
@@ -1065,7 +1049,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 				maxRetries: 1,
 			})
@@ -1101,13 +1086,14 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 				maxRetries: 0,
 				onError,
 			})
 
-			// 送信失敗: MAIL FROM fails → RSET fails → close() → start() promise rejects
+			// Send failure: MAIL FROM fails → RSET fails → close() → start() promise rejects
 			mockReader.read
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("451 Temporary failure\r\n"),
@@ -1126,7 +1112,7 @@ describe("WorkerMailer", () => {
 
 			await expect(sendPromise).rejects.toThrow("[WorkerMailer] MAIL FROM failed")
 
-			// onError は start() の catch で非同期に呼ばれるので少し待つ
+			// onError is called asynchronously in start()'s catch, so wait a bit
 			await new Promise<void>((resolve) => setTimeout(resolve, 50))
 
 			expect(onError).toHaveBeenCalledWith(
@@ -1158,7 +1144,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 			})
 
@@ -1175,7 +1162,7 @@ describe("WorkerMailer", () => {
 		})
 
 		it("should reject queued emails' sent promises when close() is called", async () => {
-			// start() が dequeue() で待機中に止まるよう、最初のメール送信を永久にブロックする
+			// Block the first email send permanently so start() stays waiting on dequeue()
 			let blockMailFrom: (() => void) | undefined
 			const mailFromBlocked = new Promise<void>((resolve) => {
 				blockMailFrom = resolve
@@ -1196,7 +1183,7 @@ describe("WorkerMailer", () => {
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("235 Authentication successful\r\n"),
 				})
-				// start() -> mail(): 最初のメール送信で永久に待機させる
+				// start() -> mail(): block permanently on first email send
 				.mockImplementationOnce(
 					() =>
 						new Promise<{ value: Uint8Array }>((resolve) => {
@@ -1207,21 +1194,22 @@ describe("WorkerMailer", () => {
 							})
 						}),
 				)
-				// close() -> QUIT 応答
+				// close() -> QUIT response
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("221 Bye\r\n"),
 				})
-				// 以降の read() は stream 終了を返す（start() ループのクリーンアップ用）
+				// Subsequent read() calls return stream end (for start() loop cleanup)
 				.mockResolvedValue({ value: undefined, done: true })
 
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 			})
 
-			// 最初のメールを送信（start() がこれを dequeue して MAIL FROM で待機状態になる）
+			// Send the first email (start() dequeues it and blocks on MAIL FROM)
 			const firstSent = mailer.send({
 				from: "sender@example.com",
 				to: "recipient@example.com",
@@ -1230,10 +1218,10 @@ describe("WorkerMailer", () => {
 			})
 			firstSent.catch(() => {})
 
-			// start() が最初のメールを処理し始めるのを待つ
+			// Wait for start() to begin processing the first email
 			await new Promise<void>((resolve) => setTimeout(resolve, 50))
 
-			// キューに2通目・3通目を追加（start() は1通目の MAIL FROM で待機中なのでキューに残る）
+			// Add 2nd and 3rd emails to queue (they remain queued since start() is blocked on 1st MAIL FROM)
 			const secondSent = mailer.send({
 				from: "sender@example.com",
 				to: "recipient@example.com",
@@ -1249,16 +1237,16 @@ describe("WorkerMailer", () => {
 			})
 			thirdSent.catch(() => {})
 
-			// close() を呼ぶ → キュー内の2通目・3通目の sent が reject されるべき
+			// Call close() → 2nd and 3rd emails' sent promises in queue should be rejected
 			await mailer.close()
 
-			// ブロック解除（テストのクリーンアップ）
+			// Unblock (test cleanup)
 			blockMailFrom?.()
 
-			// 1通目は emailSending として close() 内で setSentError されるべき
+			// 1st email should be setSentError'd in close() as emailSending
 			await expect(firstSent).rejects.toThrow("[WorkerMailer] Mailer is shutting down")
 
-			// 2通目・3通目はキュー内にあったため、close() のドレインで reject されるべき
+			// 2nd and 3rd emails were in the queue, so they should be rejected by close()'s drain
 			await expect(secondSent).rejects.toThrow("[WorkerMailer] Mailer is shutting down")
 			await expect(thirdSent).rejects.toThrow("[WorkerMailer] Mailer is shutting down")
 		})
@@ -1289,7 +1277,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 			})
 
@@ -1332,7 +1321,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 			})
 
@@ -1388,7 +1378,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 			})
 
@@ -1423,7 +1414,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 				autoReconnect: true,
 			})
@@ -1450,7 +1442,8 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 			})
 
@@ -1460,7 +1453,7 @@ describe("WorkerMailer", () => {
 		})
 
 		it("should reconnect and send successfully after connection drop", async () => {
-			// 初回接続
+			// Initial connection
 			mockReader.read
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
@@ -1504,23 +1497,24 @@ describe("WorkerMailer", () => {
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
 				port: 587,
-				credentials: { username: "user", password: "pass" },
+				username: "user",
+				password: "pass",
 				authType: ["plain"],
 				autoReconnect: true,
 				maxRetries: 1,
 			})
 
-			// 送信試行1回目: 接続断（MAIL FROM で接続が切れる）
+			// 1st send attempt: connection drop (connection lost at MAIL FROM)
 			mockReader.read.mockResolvedValueOnce({ value: undefined, done: true })
-			// RSET も失敗（接続切断なので）
+			// RSET also fails (due to disconnection)
 			mockReader.read.mockResolvedValueOnce({ value: undefined, done: true })
 
-			// 再接続時: connect() が新しいソケットを返す
+			// On reconnect: connect() returns a new socket
 			vi.mocked(connect).mockReturnValueOnce(
 				reconnectSocket as unknown as ReturnType<typeof connect>,
 			)
 
-			// 再接続時の initializeSmtpSession
+			// initializeSmtpSession on reconnect
 			reconnectSocketReader.read
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
@@ -1533,7 +1527,7 @@ describe("WorkerMailer", () => {
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("235 Authentication successful\r\n"),
 				})
-				// 再接続後の送信成功
+				// Successful send after reconnect
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("250 Sender OK\r\n"),
 				})
@@ -1637,7 +1631,8 @@ describe("WorkerMailerPool", () => {
 	const poolOptions = {
 		host: "smtp.example.com",
 		port: 587,
-		credentials: { username: "user", password: "pass" },
+		username: "user",
+		password: "pass",
 		authType: ["plain"] as const,
 	}
 
@@ -1673,10 +1668,10 @@ describe("WorkerMailerPool", () => {
 				text: "Hello",
 			}
 
-			// 3つのソケットにそれぞれ送信用モックを設定
+			// Set up send mocks for each of the 3 sockets
 			for (const socket of mockSockets) {
 				const reader = socket.readable.getReader()
-				// MAIL FROM, RCPT TO, DATA, BODY の各レスポンス
+				// Responses for MAIL FROM, RCPT TO, DATA, BODY
 				reader.read
 					.mockResolvedValueOnce({
 						value: new TextEncoder().encode("250 OK\r\n"),
@@ -1692,15 +1687,15 @@ describe("WorkerMailerPool", () => {
 					})
 			}
 
-			// 3通送信 → 各コネクションに1通ずつ分散されるべき
+			// Send 3 emails → should be distributed 1 per connection
 			await pool.send(emailOptions)
 			await pool.send(emailOptions)
 			await pool.send(emailOptions)
 
-			// 各ソケットの writer に書き込みが行われたことを確認
+			// Verify writes were made to each socket's writer
 			for (const socket of mockSockets) {
 				const writer = socket.writable.getWriter()
-				// 接続時の EHLO + AUTH PLAIN + 送信時の MAIL FROM, RCPT TO, DATA, BODY
+				// EHLO + AUTH PLAIN on connect + MAIL FROM, RCPT TO, DATA, BODY on send
 				expect(writer.write.mock.calls.length).toBeGreaterThanOrEqual(4)
 			}
 
@@ -1726,7 +1721,7 @@ describe("WorkerMailerPool", () => {
 			const pool = new WorkerMailerPool({ ...poolOptions, poolSize: 2 })
 			await pool.connect()
 
-			// close 時の QUIT + レスポンス用モック
+			// QUIT + response mock for close
 			for (const socket of mockSockets) {
 				const reader = socket.readable.getReader()
 				reader.read.mockResolvedValueOnce({
