@@ -125,9 +125,12 @@ export class Email {
 		this.headers = options.headers || {}
 
 		this.validateNoCRLF()
+		this.validateEmailAddresses()
 	}
 
 	private static readonly CRLF_PATTERN = /[\r\n]/
+
+	private static readonly EMAIL_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/
 
 	private validateNoCRLF() {
 		if (Email.CRLF_PATTERN.test(this.subject)) {
@@ -137,6 +140,32 @@ export class Email {
 			if (Email.CRLF_PATTERN.test(key) || Email.CRLF_PATTERN.test(value)) {
 				throw new Error(`CRLF injection detected in header: ${key}`)
 			}
+		}
+	}
+
+	private validateEmailAddresses() {
+		this.validateEmail(this.from.email, "from")
+		for (const user of this.to) {
+			this.validateEmail(user.email, "to")
+		}
+		if (this.cc) {
+			for (const user of this.cc) {
+				this.validateEmail(user.email, "cc")
+			}
+		}
+		if (this.bcc) {
+			for (const user of this.bcc) {
+				this.validateEmail(user.email, "bcc")
+			}
+		}
+		if (this.reply) {
+			this.validateEmail(this.reply.email, "reply-to")
+		}
+	}
+
+	private validateEmail(email: string, field: string) {
+		if (!Email.EMAIL_PATTERN.test(email)) {
+			throw new Error(`Invalid email address in ${field}: ${email}`)
 		}
 	}
 

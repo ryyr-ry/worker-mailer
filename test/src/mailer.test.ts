@@ -848,14 +848,14 @@ describe("WorkerMailer", () => {
 				authType: ["plain", "login"],
 			})
 
-			await expect(
+			expect(() =>
 				mailer.send({
 					from: { email: "attacker@evil.com\r\nRCPT TO: <victim@target.com>" },
 					to: [{ email: "legit@example.com" }],
 					subject: "test",
 					text: "test",
 				}),
-			).rejects.toThrow(/CRLF/)
+			).toThrow(/Invalid email address/)
 
 			await mailer.close()
 		})
@@ -886,14 +886,14 @@ describe("WorkerMailer", () => {
 				value: new TextEncoder().encode("250 Sender OK\r\n"),
 			})
 
-			await expect(
+			expect(() =>
 				mailer.send({
 					from: { email: "sender@example.com" },
 					to: [{ email: "victim@target.com\r\nDATA" }],
 					subject: "test",
 					text: "test",
 				}),
-			).rejects.toThrow(/CRLF/)
+			).toThrow(/Invalid email address/)
 
 			await mailer.close()
 		})

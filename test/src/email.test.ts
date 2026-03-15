@@ -474,6 +474,55 @@ describe("Email", () => {
 			expect(data).not.toContain("Secret User")
 			expect(data).not.toMatch(/BCC:/i)
 		})
+
+		it("should reject email addresses without @", () => {
+			expect(
+				() =>
+					new Email({
+						from: "not-an-email",
+						to: "recipient@example.com",
+						subject: "test",
+						text: "test",
+					}),
+			).toThrow(/Invalid email address/)
+		})
+
+		it("should reject email addresses with angle brackets", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "<injected>@example.com",
+						subject: "test",
+						text: "test",
+					}),
+			).toThrow(/Invalid email address/)
+		})
+
+		it("should reject empty email addresses", () => {
+			expect(
+				() =>
+					new Email({
+						from: "",
+						to: "recipient@example.com",
+						subject: "test",
+						text: "test",
+					}),
+			).toThrow(/Invalid email address/)
+		})
+
+		it("should accept valid email addresses", () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: ["user@example.com", "admin@sub.example.co.jp"],
+				cc: "cc@example.com",
+				bcc: "bcc@example.com",
+				reply: "reply@example.com",
+				subject: "test",
+				text: "test",
+			})
+			expect(email.from.email).toBe("sender@example.com")
+		})
 	})
 })
 
