@@ -647,6 +647,108 @@ describe("Email", () => {
 			})
 			expect(email.attachments).toHaveLength(1)
 		})
+
+		it("should accept attachment with Uint8Array content", () => {
+			const binaryContent = new Uint8Array([72, 101, 108, 108, 111])
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "test",
+				text: "test",
+				attachments: [
+					{
+						filename: "binary.bin",
+						content: binaryContent,
+					},
+				],
+			})
+			expect(email.attachments).toHaveLength(1)
+		})
+
+		it("should accept attachment with ArrayBuffer content", () => {
+			const buffer = new Uint8Array([72, 101, 108, 108, 111]).buffer
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "test",
+				text: "test",
+				attachments: [
+					{
+						filename: "binary.bin",
+						content: buffer as ArrayBuffer,
+					},
+				],
+			})
+			expect(email.attachments).toHaveLength(1)
+		})
+
+		it("should encode Uint8Array attachment content to base64 in email data", () => {
+			const binaryContent = new Uint8Array([72, 101, 108, 108, 111])
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "test",
+				text: "test",
+				attachments: [
+					{
+						filename: "test.txt",
+						content: binaryContent,
+					},
+				],
+			})
+			const data = email.getEmailData()
+			const msg = extract(data)
+			expect(msg.attachments).toHaveLength(1)
+			expect(msg.attachments?.[0].body).toBe("Hello")
+			expect(msg.attachments?.[0].filename).toBe("test.txt")
+		})
+
+		it("should encode ArrayBuffer attachment content to base64 in email data", () => {
+			const buffer = new Uint8Array([72, 101, 108, 108, 111]).buffer
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "test",
+				text: "test",
+				attachments: [
+					{
+						filename: "test.txt",
+						content: buffer as ArrayBuffer,
+					},
+				],
+			})
+			const data = email.getEmailData()
+			const msg = extract(data)
+			expect(msg.attachments).toHaveLength(1)
+			expect(msg.attachments?.[0].body).toBe("Hello")
+			expect(msg.attachments?.[0].filename).toBe("test.txt")
+		})
+
+		it("should handle mixed string and binary attachments", () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "test",
+				text: "test",
+				attachments: [
+					{
+						filename: "text.txt",
+						content: Buffer.from("StringContent").toString("base64"),
+					},
+					{
+						filename: "binary.txt",
+						content: new Uint8Array([66, 105, 110, 97, 114, 121]),
+					},
+				],
+			})
+			const data = email.getEmailData()
+			const msg = extract(data)
+			expect(msg.attachments).toHaveLength(2)
+			expect(msg.attachments?.[0].body).toBe("StringContent")
+			expect(msg.attachments?.[0].filename).toBe("text.txt")
+			expect(msg.attachments?.[1].body).toBe("Binary")
+			expect(msg.attachments?.[1].filename).toBe("binary.txt")
+		})
 	})
 
 	describe("header line folding (RFC 5322 §2.1.1)", () => {

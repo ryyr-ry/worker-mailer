@@ -17,7 +17,7 @@ export class BlockingQueue<T> {
 
 	public async dequeue(): Promise<T> {
 		if (this._closed) {
-			return Promise.reject(new Error("Queue is closed"))
+			throw new Error("Queue is closed")
 		}
 		if (!this.values.length) {
 			this.addWrapper()
@@ -72,6 +72,15 @@ export function encode(data: string): Uint8Array {
 
 export function toBase64(data: string): string {
 	const bytes = encoder.encode(data)
+	let binary = ""
+	for (const byte of bytes) {
+		binary += String.fromCharCode(byte)
+	}
+	return btoa(binary)
+}
+
+export function arrayBufferToBase64(buffer: ArrayBuffer): string {
+	const bytes = new Uint8Array(buffer)
 	let binary = ""
 	for (const byte of bytes) {
 		binary += String.fromCharCode(byte)

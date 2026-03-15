@@ -1,4 +1,4 @@
-import { encode, encodeQuotedPrintable } from "./utils"
+import { arrayBufferToBase64, encode, encodeQuotedPrintable } from "./utils"
 
 function isAsciiOnly(text: string): boolean {
 	for (let i = 0; i < text.length; i++) {
@@ -60,7 +60,11 @@ export type EmailOptions = {
 	text?: string
 	html?: string
 	headers?: Record<string, string>
-	attachments?: { filename: string; content: string; mimeType?: string }[]
+	attachments?: {
+		filename: string
+		content: string | Uint8Array | ArrayBuffer
+		mimeType?: string
+	}[]
 	dsnOverride?: {
 		envelopeId?: string
 		RET?: {
@@ -100,7 +104,7 @@ export class Email {
 
 	public readonly attachments?: {
 		filename: string
-		content: string
+		content: string | Uint8Array | ArrayBuffer
 		mimeType?: string
 	}[]
 
@@ -197,7 +201,10 @@ export class Email {
 					`Invalid attachment filename: ${attachment.filename.replaceAll(/[\r\n]/g, "?")}`,
 				)
 			}
-			if (!Email.BASE64_PATTERN.test(attachment.content)) {
+			if (
+				typeof attachment.content === "string" &&
+				!Email.BASE64_PATTERN.test(attachment.content)
+			) {
 				throw new Error(`Invalid base64 content in attachment: ${attachment.filename}`)
 			}
 		}
@@ -301,12 +308,23 @@ export class Email {
 				emailData += `Content-Disposition: attachment; filename="${attachment.filename}"\r\n`
 				emailData += `Content-Transfer-Encoding: base64\r\n\r\n`
 
-				// split the content into multiple lines to avoid line length greater than 76 characters https://en.wikipedia.org/wiki/Base64#Variants_summary_table
-				const lines = attachment.content.match(/.{1,72}/g)
+				const base64Content =
+					typeof attachment.content === "string"
+						? attachment.content
+						: arrayBufferToBase64(
+								attachment.content instanceof ArrayBuffer
+									? attachment.content
+									: (attachment.content.buffer.slice(
+											attachment.content.byteOffset,
+											attachment.content.byteOffset + attachment.content.byteLength,
+										) as ArrayBuffer),
+							)
+
+				const lines = base64Content.match(/.{1,72}/g)
 				if (lines) {
 					emailData += `${lines.join("\r\n")}`
 				} else {
-					emailData += `${attachment.content}`
+					emailData += `${base64Content}`
 				}
 				emailData += "\r\n\r\n"
 			}

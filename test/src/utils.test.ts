@@ -59,6 +59,9 @@ describe("BlockingQueue", () => {
 	it("clear()が待機中のPromiseをrejectすること", async () => {
 		const promise1 = queue.dequeue()
 		const promise2 = queue.dequeue()
+		// Unhandled Rejection 警告を抑制（別チェーンで catch）
+		promise1.catch(() => {})
+		promise2.catch(() => {})
 		queue.clear()
 
 		await expect(promise1).rejects.toThrow("Queue was cleared")
@@ -67,6 +70,7 @@ describe("BlockingQueue", () => {
 
 	it("close()が待機中のPromiseをrejectすること", async () => {
 		const promise = queue.dequeue()
+		promise.catch(() => {})
 		queue.close()
 
 		await expect(promise).rejects.toThrow("Queue is closed")
