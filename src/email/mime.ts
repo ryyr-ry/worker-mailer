@@ -32,6 +32,8 @@ export function getMimeType(filename: string): string {
 		jpg: "image/jpeg",
 		jpeg: "image/jpeg",
 		gif: "image/gif",
+		svg: "image/svg+xml",
+		webp: "image/webp",
 		zip: "application/zip",
 	}
 	return types[ext || "txt"] || "application/octet-stream"

@@ -1,0 +1,212 @@
+import { describe, expect, it } from "vitest"
+import { Email } from "../../src/email/email"
+
+const PNG_1PX =
+	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+const GIF_1PX = "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
+
+function makeEmail(overrides: Record<string, unknown> = {}) {
+	return new Email({
+		from: "sender@example.com",
+		to: "recipient@example.com",
+		subject: "Test",
+		html: '<img src="cid:logo">',
+		inlineAttachments: [
+			{
+				cid: "logo",
+				filename: "logo.png",
+				content: PNG_1PX,
+			},
+		],
+		...overrides,
+	})
+}
+
+describe("Inline images (CID)", () => {
+	it("correct MIME structure for single inline image", () => {
+		const raw = makeEmail().getRawMessage()
+		expect(raw).toContain("multipart/related")
+		expect(raw).toContain("Content-ID: <logo>")
+		expect(raw).toContain("Content-Type: image/png")
+	})
+
+	it("Content-ID: <cid> included in headers", () => {
+		const raw = makeEmail().getRawMessage()
+		expect(raw).toMatch(/Content-ID: <logo>\r\n/)
+	})
+
+	it("Content-Disposition: inline is set", () => {
+		const raw = makeEmail().getRawMessage()
+		expect(raw).toMatch(/Content-Disposition: inline; filename="logo\.png"/)
+	})
+
+	it("multiple inline images stored correctly", () => {
+		const email = makeEmail({
+			html: '<img src="cid:logo"><img src="cid:banner">',
+			inlineAttachments: [
+				{ cid: "logo", filename: "logo.png", content: PNG_1PX },
+				{ cid: "banner", filename: "banner.gif", content: GIF_1PX },
+			],
+		})
+		const raw = email.getRawMessage()
+		expect(raw).toContain("Content-ID: <logo>")
+		expect(raw).toContain("Content-ID: <banner>")
+		expect(raw).toContain("Content-Type: image/png")
+		expect(raw).toContain("Content-Type: image/gif")
+	})
+
+	it("text + html + inline produces multipart/alternative > multipart/related", () => {
+		const email = makeEmail({ text: "plain fallback" })
+		const raw = email.getRawMessage()
+		expect(raw).toContain("multipart/alternative")
+		expect(raw).toContain("multipart/related")
+		expect(raw).toContain("Content-ID: <logo>")
+		expect(raw).toContain("text/plain")
+		const altIdx = raw.indexOf("multipart/alternative")
+		const relIdx = raw.indexOf("multipart/related")
+		expect(altIdx).toBeLessThan(relIdx)
+	})
+
+	it("text + html + inline + attach produces full 4-layer structure", () => {
+		const email = makeEmail({
+			text: "plain fallback",
+			attachments: [
+				{
+					filename: "doc.pdf",
+					content: "JVBERi0xLjQK",
+					mimeType: "application/pdf",
+				},
+			],
+		})
+		const raw = email.getRawMessage()
+		expect(raw).toContain("multipart/mixed")
+		expect(raw).toContain("multipart/alternative")
+		expect(raw).toContain("multipart/related")
+		expect(raw).toContain("Content-ID: <logo>")
+		expect(raw).toContain('Content-Disposition: attachment; filename="doc.pdf"')
+	})
+
+	it("html + inline (no text) produces multipart/related", () => {
+		const raw = makeEmail().getRawMessage()
+		expect(raw).toContain("multipart/related")
+		expect(raw).not.toContain("multipart/alternative")
+	})
+
+	it("duplicate CID throws error", () => {
+		expect(() =>
+			makeEmail({
+				inlineAttachments: [
+					{ cid: "logo", filename: "a.png", content: PNG_1PX },
+					{ cid: "logo", filename: "b.png", content: PNG_1PX },
+				],
+			}),
+		).toThrow("Duplicate inline attachment CID: logo")
+	})
+
+	it("inlineAttachments without HTML throws error", () => {
+		expect(
+			() =>
+				new Email({
+					from: "sender@example.com",
+					to: "recipient@example.com",
+					subject: "Test",
+					text: "plain only",
+					inlineAttachments: [{ cid: "logo", filename: "logo.png", content: PNG_1PX }],
+				}),
+		).toThrow("Inline attachments require HTML content")
+	})
+
+	it("CRLF in CID throws error", () => {
+		expect(() =>
+			makeEmail({
+				inlineAttachments: [{ cid: "logo\r\nEvil: header", filename: "a.png", content: PNG_1PX }],
+			}),
+		).toThrow("CRLF injection detected in inline attachment CID")
+	})
+
+	it("angle brackets in CID throws error", () => {
+		expect(() =>
+			makeEmail({
+				inlineAttachments: [{ cid: "<logo>", filename: "a.png", content: PNG_1PX }],
+			}),
+		).toThrow("must not contain angle brackets")
+	})
+
+	it("empty CID throws error", () => {
+		expect(() =>
+			makeEmail({
+				inlineAttachments: [{ cid: "", filename: "a.png", content: PNG_1PX }],
+			}),
+		).toThrow("CID must not be empty")
+	})
+
+	it("auto-detects MIME type for png, jpg, gif, svg", () => {
+		const cases = [
+			{ filename: "img.png", expected: "image/png" },
+			{ filename: "photo.jpg", expected: "image/jpeg" },
+			{ filename: "photo.jpeg", expected: "image/jpeg" },
+			{ filename: "anim.gif", expected: "image/gif" },
+			{ filename: "icon.svg", expected: "image/svg+xml" },
+		]
+		for (const { filename, expected } of cases) {
+			const email = makeEmail({
+				inlineAttachments: [{ cid: "img", filename, content: PNG_1PX }],
+			})
+			const raw = email.getRawMessage()
+			expect(raw).toContain(`Content-Type: ${expected}`)
+		}
+	})
+
+	it("explicit mimeType overrides auto-detection", () => {
+		const email = makeEmail({
+			inlineAttachments: [
+				{
+					cid: "logo",
+					filename: "logo.png",
+					content: PNG_1PX,
+					mimeType: "image/webp",
+				},
+			],
+		})
+		const raw = email.getRawMessage()
+		expect(raw).toContain("Content-Type: image/webp")
+		expect(raw).not.toMatch(/Content-Type: image\/png; name="logo\.png"/)
+	})
+
+	it("getRawMessage() includes inline images in full output", () => {
+		const raw = makeEmail().getRawMessage()
+		expect(raw).toContain("MIME-Version: 1.0")
+		expect(raw).toContain("Content-ID: <logo>")
+		expect(raw).toContain("Content-Transfer-Encoding: base64")
+		expect(raw).toContain("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAA")
+	})
+
+	it("Uint8Array content is encoded as base64", () => {
+		const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+		const email = makeEmail({
+			inlineAttachments: [{ cid: "logo", filename: "logo.png", content: bytes }],
+		})
+		const raw = email.getRawMessage()
+		expect(raw).toContain("Content-ID: <logo>")
+		expect(raw).toContain("Content-Transfer-Encoding: base64")
+	})
+
+	it("html + inline + attach (no text) produces mixed > related", () => {
+		const email = makeEmail({
+			attachments: [
+				{
+					filename: "doc.pdf",
+					content: "JVBERi0xLjQK",
+					mimeType: "application/pdf",
+				},
+			],
+		})
+		const raw = email.getRawMessage()
+		expect(raw).toContain("multipart/mixed")
+		expect(raw).toContain("multipart/related")
+		expect(raw).not.toContain("multipart/alternative")
+		expect(raw).toContain("Content-ID: <logo>")
+		expect(raw).toContain('Content-Disposition: attachment; filename="doc.pdf"')
+	})
+})
