@@ -2,7 +2,9 @@ import { encode, encodeQuotedPrintable } from "./utils"
 
 function isAsciiOnly(text: string): boolean {
 	for (let i = 0; i < text.length; i++) {
-		if (text.charCodeAt(i) > 127) return false
+		const code = text.charCodeAt(i)
+		if (code >= 0x7f) return false
+		if (code <= 0x1f && code !== 0x09) return false
 	}
 	return true
 }
@@ -138,7 +140,7 @@ export class Email {
 
 		this.validateNoCRLF()
 		this.validateEmailAddresses()
-		this.validateAttachmentFilenames()
+		this.validateAttachments()
 	}
 
 	private static readonly CRLF_PATTERN = /[\r\n]/
@@ -184,13 +186,18 @@ export class Email {
 
 	private static readonly UNSAFE_FILENAME_PATTERN = /[\r\n"]/
 
-	private validateAttachmentFilenames() {
+	private static readonly BASE64_PATTERN = /^[A-Za-z0-9+/\r\n]+=*$/
+
+	private validateAttachments() {
 		if (!this.attachments) return
 		for (const attachment of this.attachments) {
 			if (Email.UNSAFE_FILENAME_PATTERN.test(attachment.filename)) {
 				throw new Error(
 					`Invalid attachment filename: ${attachment.filename.replaceAll(/[\r\n]/g, "?")}`,
 				)
+			}
+			if (!Email.BASE64_PATTERN.test(attachment.content)) {
+				throw new Error(`Invalid base64 content in attachment: ${attachment.filename}`)
 			}
 		}
 	}
@@ -286,8 +293,7 @@ export class Email {
 				emailData += `--${mixedBoundary}\r\n`
 				emailData += `Content-Type: ${mimeType}; name="${attachment.filename}"\r\n`
 				emailData += `Content-Description: ${attachment.filename}\r\n`
-				emailData += `Content-Disposition: attachment; filename="${attachment.filename}";\r\n`
-				emailData += `    creation-date="${new Date().toUTCString()}";\r\n`
+				emailData += `Content-Disposition: attachment; filename="${attachment.filename}"\r\n`
 				emailData += `Content-Transfer-Encoding: base64\r\n\r\n`
 
 				// split the content into multiple lines to avoid line length greater than 76 characters https://en.wikipedia.org/wiki/Base64#Variants_summary_table

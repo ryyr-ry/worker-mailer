@@ -362,6 +362,9 @@ describe("Email", () => {
 				},
 			},
 		])
+		expect(data).not.toContain("creation-date")
+		expect(data).toMatch(/Content-Disposition: attachment; filename="test\.txt"\r\n/)
+		expect(data).toMatch(/Content-Disposition: attachment; filename="test2\.txt"\r\n/)
 	})
 
 	describe("sent promise", () => {
@@ -569,11 +572,80 @@ describe("Email", () => {
 				subject: "test",
 				text: "test",
 				attachments: [
-					{ filename: "report-2024.pdf", content: "data" },
-					{ filename: "日本語ファイル.txt", content: "data" },
+					{ filename: "report-2024.pdf", content: Buffer.from("pdf-data").toString("base64") },
+					{ filename: "日本語ファイル.txt", content: Buffer.from("text-data").toString("base64") },
 				],
 			})
 			expect(email.attachments).toHaveLength(2)
+		})
+
+		it("should reject attachment with invalid base64 content", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "recipient@example.com",
+						subject: "test",
+						text: "test",
+						attachments: [
+							{
+								filename: "test.txt",
+								content: "not valid base64!@#$%",
+							},
+						],
+					}),
+			).toThrow(/Invalid base64 content in attachment/)
+		})
+
+		it("should reject attachment with base64 content containing angle brackets", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "recipient@example.com",
+						subject: "test",
+						text: "test",
+						attachments: [
+							{
+								filename: "test.txt",
+								content: "<script>alert(1)</script>",
+							},
+						],
+					}),
+			).toThrow(/Invalid base64 content in attachment/)
+		})
+
+		it("should accept attachment with valid base64 content", () => {
+			const validBase64 = Buffer.from("Hello, World!").toString("base64")
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "test",
+				text: "test",
+				attachments: [
+					{
+						filename: "test.txt",
+						content: validBase64,
+					},
+				],
+			})
+			expect(email.attachments).toHaveLength(1)
+		})
+
+		it("should accept attachment with base64 content including padding", () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "test",
+				text: "test",
+				attachments: [
+					{
+						filename: "test.txt",
+						content: "SGVsbG8=",
+					},
+				],
+			})
+			expect(email.attachments).toHaveLength(1)
 		})
 	})
 
@@ -624,6 +696,56 @@ describe("encodeHeader", () => {
 			const input = "Test: Email Subject!"
 			const result = encodeHeader(input)
 			expect(result).toBe("Test: Email Subject!")
+		})
+	})
+
+	describe("Control characters", () => {
+		it("should encode text containing null byte", () => {
+			const input = "Hello\x00World"
+			const result = encodeHeader(input)
+			expect(result).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+		})
+
+		it("should encode text containing bell character (0x07)", () => {
+			const input = "Hello\x07World"
+			const result = encodeHeader(input)
+			expect(result).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+		})
+
+		it("should encode text containing line feed (0x0A)", () => {
+			const input = "Hello\nWorld"
+			const result = encodeHeader(input)
+			expect(result).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+		})
+
+		it("should encode text containing carriage return (0x0D)", () => {
+			const input = "Hello\rWorld"
+			const result = encodeHeader(input)
+			expect(result).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+		})
+
+		it("should encode text containing escape character (0x1B)", () => {
+			const input = "Hello\x1BWorld"
+			const result = encodeHeader(input)
+			expect(result).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+		})
+
+		it("should encode text containing DEL character (0x7F)", () => {
+			const input = "Hello\x7FWorld"
+			const result = encodeHeader(input)
+			expect(result).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+		})
+
+		it("should not encode text containing only tab (0x09) and printable ASCII", () => {
+			const input = "Hello\tWorld"
+			const result = encodeHeader(input)
+			expect(result).toBe("Hello\tWorld")
+		})
+
+		it("should encode text with multiple control characters", () => {
+			const input = "\x01\x02\x03"
+			const result = encodeHeader(input)
+			expect(result).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
 		})
 	})
 

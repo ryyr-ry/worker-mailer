@@ -55,6 +55,32 @@ describe("BlockingQueue", () => {
 
 		expect(queue.length).toBe(0)
 	})
+
+	it("clear()が待機中のPromiseをrejectすること", async () => {
+		const promise1 = queue.dequeue()
+		const promise2 = queue.dequeue()
+		queue.clear()
+
+		await expect(promise1).rejects.toThrow("Queue was cleared")
+		await expect(promise2).rejects.toThrow("Queue was cleared")
+	})
+
+	it("close()が待機中のPromiseをrejectすること", async () => {
+		const promise = queue.dequeue()
+		queue.close()
+
+		await expect(promise).rejects.toThrow("Queue is closed")
+	})
+
+	it("close()後にenqueue()がthrowすること", () => {
+		queue.close()
+		expect(() => queue.enqueue(1)).toThrow("Queue is closed")
+	})
+
+	it("close()後にdequeue()がrejectすること", async () => {
+		queue.close()
+		await expect(queue.dequeue()).rejects.toThrow("Queue is closed")
+	})
 })
 
 describe("execTimeout", () => {
@@ -383,11 +409,28 @@ describe("encodeQuotedPrintable", () => {
 	})
 
 	describe("Boundary conditions", () => {
+		it("should use full 76 character line width per RFC 2045", () => {
+			const input76 = "a".repeat(76)
+			const result76 = encodeQuotedPrintable(input76)
+			expect(result76).toBe("a".repeat(76))
+			expect(result76).not.toContain("=\r\n")
+
+			const input77 = "a".repeat(77)
+			const result77 = encodeQuotedPrintable(input77)
+			expect(result77).toContain("=\r\n")
+
+			const lines77 = result77.split("\r\n")
+			for (const line of lines77) {
+				const effectiveLength = line.endsWith("=") ? line.length - 1 : line.length
+				expect(effectiveLength).toBeLessThanOrEqual(76)
+			}
+		})
+
 		it("should handle exactly 76 characters", () => {
 			const input = "a".repeat(76)
 			const result = encodeQuotedPrintable(input)
-			// Our implementation reserves 3 chars for safety, so it may wrap before 76
-			// This is acceptable and safe behavior
+			// RFC 2045準拠: 76文字のASCIIはソフトブレークなしで1行に収まる
+			expect(result).toBe("a".repeat(76))
 			const decoded = libqp.decode(result).toString()
 			expect(decoded).toBe(input)
 

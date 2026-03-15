@@ -39,9 +39,8 @@ describe("Logger", () => {
 	describe("logging methods", () => {
 		it("should log debug messages when level is DEBUG", () => {
 			const logger = new Logger(LogLevel.DEBUG, "[Test]")
-			const message = "debug message"
-			logger.debug(message)
-			expect(consoleSpy.debug).toHaveBeenCalledWith("[Test]debug message")
+			logger.debug("debug message")
+			expect(consoleSpy.debug).toHaveBeenCalledWith(expect.stringContaining("[Test] debug message"))
 		})
 
 		it("should not log debug messages when level is INFO", () => {
@@ -52,9 +51,8 @@ describe("Logger", () => {
 
 		it("should log info messages when level is INFO", () => {
 			const logger = new Logger(LogLevel.INFO, "[Test]")
-			const message = "info message"
-			logger.info(message)
-			expect(consoleSpy.info).toHaveBeenCalledWith("[Test]info message")
+			logger.info("info message")
+			expect(consoleSpy.info).toHaveBeenCalledWith(expect.stringContaining("[Test] info message"))
 		})
 
 		it("should not log info messages when level is WARN", () => {
@@ -65,9 +63,8 @@ describe("Logger", () => {
 
 		it("should log warn messages when level is WARN", () => {
 			const logger = new Logger(LogLevel.WARN, "[Test]")
-			const message = "warn message"
-			logger.warn(message)
-			expect(consoleSpy.warn).toHaveBeenCalledWith("[Test]warn message")
+			logger.warn("warn message")
+			expect(consoleSpy.warn).toHaveBeenCalledWith(expect.stringContaining("[Test] warn message"))
 		})
 
 		it("should not log warn messages when level is ERROR", () => {
@@ -78,9 +75,8 @@ describe("Logger", () => {
 
 		it("should log error messages when level is ERROR", () => {
 			const logger = new Logger(LogLevel.ERROR, "[Test]")
-			const message = "error message"
-			logger.error(message)
-			expect(consoleSpy.error).toHaveBeenCalledWith("[Test]error message")
+			logger.error("error message")
+			expect(consoleSpy.error).toHaveBeenCalledWith(expect.stringContaining("[Test] error message"))
 		})
 
 		it("should not log any messages when level is NONE", () => {
@@ -100,20 +96,37 @@ describe("Logger", () => {
 		it("should format message with additional arguments", () => {
 			const logger = new Logger(LogLevel.INFO, "[Test]")
 			logger.info("message with %s", "argument")
-			expect(consoleSpy.info).toHaveBeenCalledWith("[Test]message with %s", "argument")
+			expect(consoleSpy.info).toHaveBeenCalledWith(
+				expect.stringContaining("[Test] message with %s"),
+				"argument",
+			)
 		})
 
 		it("should handle multiple arguments", () => {
 			const logger = new Logger(LogLevel.INFO, "[Test]")
 			logger.info("message with %s and %d", "string", 42)
-			expect(consoleSpy.info).toHaveBeenCalledWith("[Test]message with %s and %d", "string", 42)
+			expect(consoleSpy.info).toHaveBeenCalledWith(
+				expect.stringContaining("[Test] message with %s and %d"),
+				"string",
+				42,
+			)
 		})
 
 		it("should handle objects in arguments", () => {
 			const logger = new Logger(LogLevel.INFO, "[Test]")
 			const obj = { key: "value" }
 			logger.info("message with object:", obj)
-			expect(consoleSpy.info).toHaveBeenCalledWith("[Test]message with object:", obj)
+			expect(consoleSpy.info).toHaveBeenCalledWith(
+				expect.stringContaining("[Test] message with object:"),
+				obj,
+			)
+		})
+
+		it("should include ISO timestamp in log output", () => {
+			const logger = new Logger(LogLevel.INFO, "[Test]")
+			logger.info("timestamp test")
+			const loggedMessage = consoleSpy.info.mock.calls[0][0] as string
+			expect(loggedMessage).toMatch(/^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]/)
 		})
 	})
 })

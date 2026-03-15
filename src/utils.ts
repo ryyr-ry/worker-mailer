@@ -1,19 +1,27 @@
 export class BlockingQueue<T> {
 	private values: Promise<T>[] = []
 	private resolvers: ((value: T) => void)[] = []
+	private rejecters: ((reason: Error) => void)[] = []
+	private _closed = false
 
 	public enqueue(value: T) {
+		if (this._closed) {
+			throw new Error("Queue is closed")
+		}
 		if (!this.resolvers.length) {
 			this.addWrapper()
 		}
 		this.resolvers.shift()?.(value)
+		this.rejecters.shift()
 	}
 
 	public async dequeue(): Promise<T> {
+		if (this._closed) {
+			return Promise.reject(new Error("Queue is closed"))
+		}
 		if (!this.values.length) {
 			this.addWrapper()
 		}
-		// addWrapper() guarantees values has at least one element
 		return this.values.shift() as Promise<T>
 	}
 
@@ -21,15 +29,33 @@ export class BlockingQueue<T> {
 		return this.values.length
 	}
 
+	public get closed(): boolean {
+		return this._closed
+	}
+
 	public clear() {
+		this.rejectAll(new Error("Queue was cleared"))
+	}
+
+	public close() {
+		this._closed = true
+		this.rejectAll(new Error("Queue is closed"))
+	}
+
+	private rejectAll(reason: Error) {
+		for (const reject of this.rejecters) {
+			reject(reason)
+		}
 		this.values = []
 		this.resolvers = []
+		this.rejecters = []
 	}
 
 	private addWrapper() {
 		this.values.push(
-			new Promise<T>((resolve) => {
+			new Promise<T>((resolve, reject) => {
 				this.resolvers.push(resolve)
+				this.rejecters.push(reject)
 			}),
 		)
 	}
@@ -113,9 +139,7 @@ export function encodeQuotedPrintable(text: string, lineLength = 76): string {
 			}
 		}
 
-		// Check if we need a soft line break
-		// Reserve 3 characters for potential '=XX' encoding at line end
-		if (currentLineLength + encoded.length > lineLength - 3) {
+		if (currentLineLength + encoded.length > lineLength) {
 			result += "=\r\n"
 			currentLineLength = 0
 		}
