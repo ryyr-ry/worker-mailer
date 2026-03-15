@@ -148,7 +148,10 @@ export class WorkerMailer {
 	private async read(): Promise<string> {
 		let response = ""
 		while (true) {
-			const { value } = await this.reader.read()
+			const { value, done } = await this.reader.read()
+			if (done) {
+				throw new Error("SMTP server closed the connection unexpectedly")
+			}
 			if (!value) {
 				continue
 			}

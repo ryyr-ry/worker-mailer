@@ -726,6 +726,42 @@ describe("WorkerMailer", () => {
 	})
 
 	describe("security", () => {
+		it("should throw when SMTP server closes connection unexpectedly", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				credentials: { username: "user", password: "pass" },
+				authType: ["plain", "login"],
+			})
+
+			// Simulate server closing connection (done: true)
+			mockReader.read.mockResolvedValueOnce({ value: undefined, done: true })
+
+			await expect(
+				mailer.send({
+					from: { email: "sender@example.com" },
+					to: [{ email: "recipient@example.com" }],
+					subject: "test",
+					text: "test",
+				}),
+			).rejects.toThrow(/closed the connection/)
+
+			await mailer.close()
+		})
+
 		it("should reject CRLF in email addresses (SMTP command injection)", async () => {
 			mockReader.read
 				.mockResolvedValueOnce({
