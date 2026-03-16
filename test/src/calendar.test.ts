@@ -206,9 +206,10 @@ describe("Calendar invites", () => {
 			expect(result.content).toContain("END:VALARM")
 		})
 
-		it("reminderMinutes negative outputs negative trigger", () => {
-			const result = createCalendarEvent(baseOptions({ reminderMinutes: -5 }))
-			expect(result.content).toContain("TRIGGER:-PT-5M")
+		it("reminderMinutes negative throws CalendarValidationError", () => {
+			expect(() =>
+				createCalendarEvent(baseOptions({ reminderMinutes: -5 })),
+			).toThrow("reminderMinutes must not be negative")
 		})
 
 		it("iCalendar structure order: VCALENDAR > VEVENT > END:VEVENT > END:VCALENDAR", () => {

@@ -55,6 +55,9 @@ function validateCalendarOptions(options: CalendarEventOptions): void {
 	if (options.start >= options.end) {
 		throw new CalendarValidationError("[Calendar] start must be before end")
 	}
+	if (options.reminderMinutes !== undefined && options.reminderMinutes < 0) {
+		throw new CalendarValidationError("[Calendar] reminderMinutes must not be negative")
+	}
 }
 
 function appendOrganizer(lines: string[], organizer: { name?: string; email: string }): void {

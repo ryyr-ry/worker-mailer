@@ -159,7 +159,7 @@ function buildContentBody(params: MimeMessageParams): string {
 	})
 }
 
-function buildWithAttachAndCal(ctx: {
+type ContentBuildContext = {
 	hasText: boolean
 	hasHtml: boolean
 	hasInline: boolean
@@ -170,59 +170,37 @@ function buildWithAttachAndCal(ctx: {
 	htmlPart: string
 	calPart: string
 	attaches: string[]
-}): string {
-	const { hasText, hasHtml, hasInline, hasAttach, hasCal } = ctx
-	const { textPart, htmlOrRelated, htmlPart, calPart, attaches } = ctx
+}
 
-	const altParts = buildAltParts(
-		hasText,
-		hasInline,
-		textPart,
-		htmlOrRelated,
-		htmlPart,
-		calPart,
-		hasCal,
-	)
+function buildWithAttachAndCal(ctx: ContentBuildContext): string {
+	const altParts = buildAltParts(ctx)
 
-	if (hasText && hasHtml && !hasAttach) {
+	if (ctx.hasText && ctx.hasHtml && !ctx.hasAttach) {
 		return buildMultipart("alternative", altParts)
 	}
-
-	if (hasText && !hasHtml && hasAttach) {
-		return buildMultipart("mixed", [textPart, ...attaches])
+	if (ctx.hasText && !ctx.hasHtml && ctx.hasAttach) {
+		return buildMultipart("mixed", [ctx.textPart, ...ctx.attaches])
 	}
-
-	if (!hasText && hasHtml && !hasInline && hasAttach) {
-		return buildMultipart("mixed", [htmlPart, ...attaches])
+	if (!ctx.hasText && ctx.hasHtml && !ctx.hasInline && ctx.hasAttach) {
+		return buildMultipart("mixed", [ctx.htmlPart, ...ctx.attaches])
 	}
-
-	if (!hasText && hasHtml && hasInline && hasAttach) {
-		return buildMultipart("mixed", [htmlOrRelated, ...attaches])
+	if (!ctx.hasText && ctx.hasHtml && ctx.hasInline && ctx.hasAttach) {
+		return buildMultipart("mixed", [ctx.htmlOrRelated, ...ctx.attaches])
 	}
-
-	if (hasText && hasHtml && hasAttach) {
+	if (ctx.hasText && ctx.hasHtml && ctx.hasAttach) {
 		const alt = buildMultipart("alternative", altParts)
-		return buildMultipart("mixed", [alt, ...attaches])
+		return buildMultipart("mixed", [alt, ...ctx.attaches])
 	}
-
-	if (hasText) return textPart
-	if (hasHtml) return htmlPart
+	if (ctx.hasText) return ctx.textPart
+	if (ctx.hasHtml) return ctx.htmlPart
 	return ""
 }
 
-function buildAltParts(
-	hasText: boolean,
-	hasInline: boolean,
-	textPart: string,
-	htmlOrRelated: string,
-	htmlPart: string,
-	calPart: string,
-	hasCal: boolean,
-): string[] {
+function buildAltParts(ctx: ContentBuildContext): string[] {
 	const parts: string[] = []
-	if (hasText) parts.push(textPart)
-	parts.push(hasInline ? htmlOrRelated : htmlPart)
-	if (hasCal) parts.push(calPart)
+	if (ctx.hasText) parts.push(ctx.textPart)
+	parts.push(ctx.hasInline ? ctx.htmlOrRelated : ctx.htmlPart)
+	if (ctx.hasCal) parts.push(ctx.calPart)
 	return parts
 }
 
