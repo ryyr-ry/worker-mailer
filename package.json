@@ -4,6 +4,33 @@
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.mjs",
+			"require": "./dist/index.js"
+		},
+		"./calendar": {
+			"types": "./dist/calendar.d.ts",
+			"import": "./dist/calendar.mjs",
+			"require": "./dist/calendar.js"
+		},
+		"./testing": {
+			"types": "./dist/testing.d.ts",
+			"import": "./dist/testing.mjs",
+			"require": "./dist/testing.js"
+		},
+		"./convenience": {
+			"types": "./dist/convenience.d.ts",
+			"import": "./dist/convenience.mjs",
+			"require": "./dist/convenience.js"
+		},
+		"./validate": {
+			"types": "./dist/validate.d.ts",
+			"import": "./dist/validate.mjs",
+			"require": "./dist/validate.js"
+		}
+	},
 	"keywords": [
 		"cloudflare",
 		"workers",
