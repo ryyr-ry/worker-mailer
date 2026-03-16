@@ -8,9 +8,4 @@ export default defineConfig({
 			main: "./test/worker.ts",
 		}),
 	],
-	test: {
-		// close() テストで意図的に発生する Unhandled Rejection を許容する
-		// vitest 4.x ではデフォルトで exitCode=1 にされるため必要
-		dangerouslyIgnoreUnhandledErrors: true,
-	},
 })

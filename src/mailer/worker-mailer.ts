@@ -77,9 +77,9 @@ export class WorkerMailer implements Mailer {
 		const mailer = new WorkerMailer(options)
 		await mailer.initializeSmtpSession()
 		mailer.hooks?.onConnected?.({ host: mailer.host, port: mailer.port })
-		mailer.start().catch((e: unknown) => {
-			mailer.reportFatalError(e instanceof Error ? e : new Error(String(e)))
-		})
+		mailer
+			.start()
+			.catch((e) => mailer.reportFatalError(e instanceof Error ? e : new Error(String(e))))
 		return mailer
 	}
 	public async send(options: EmailOptions): Promise<SendResult> {

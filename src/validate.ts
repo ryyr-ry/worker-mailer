@@ -14,87 +14,54 @@ function containsControlChar(str: string): boolean {
 }
 
 export function validateEmail(address: string): ValidationResult {
-	if (address === "") {
-		return { valid: false, reason: "Email address is empty" }
-	}
-
+	if (address === "") return { valid: false, reason: "Email address is empty" }
 	if (address.length > MAX_TOTAL_LENGTH) {
 		return {
 			valid: false,
 			reason: `Email address is too long (${address.length} chars, max ${MAX_TOTAL_LENGTH})`,
 		}
 	}
-
-	if (containsControlChar(address)) {
+	if (containsControlChar(address))
 		return { valid: false, reason: "Email address contains control characters" }
-	}
 
 	const atIndex = address.lastIndexOf("@")
-	if (atIndex === -1) {
-		return { valid: false, reason: "Email address does not contain @" }
-	}
+	if (atIndex === -1) return { valid: false, reason: "Email address does not contain @" }
 
 	const localPart = address.slice(0, atIndex)
 	const domainPart = address.slice(atIndex + 1)
 
-	if (localPart === "") {
-		return { valid: false, reason: "Local part is empty" }
-	}
+	return validateLocalPart(localPart) ?? validateDomainPart(domainPart) ?? { valid: true }
+}
 
-	if (localPart.length > MAX_LOCAL_LENGTH) {
+function validateLocalPart(local: string): ValidationResult | undefined {
+	if (local === "") return { valid: false, reason: "Local part is empty" }
+	if (local.length > MAX_LOCAL_LENGTH) {
 		return {
 			valid: false,
-			reason: `Local part is too long (${localPart.length} chars, max ${MAX_LOCAL_LENGTH})`,
+			reason: `Local part is too long (${local.length} chars, max ${MAX_LOCAL_LENGTH})`,
 		}
 	}
+	if (local.startsWith(".")) return { valid: false, reason: "Local part starts with a dot" }
+	if (local.endsWith(".")) return { valid: false, reason: "Local part ends with a dot" }
+	if (local.includes("..")) return { valid: false, reason: "Local part contains consecutive dots" }
+}
 
-	if (localPart.startsWith(".")) {
-		return { valid: false, reason: "Local part starts with a dot" }
-	}
-
-	if (localPart.endsWith(".")) {
-		return { valid: false, reason: "Local part ends with a dot" }
-	}
-
-	if (localPart.includes("..")) {
-		return { valid: false, reason: "Local part contains consecutive dots" }
-	}
-
-	if (domainPart === "") {
-		return { valid: false, reason: "Domain part is empty" }
-	}
-
-	if (domainPart.length > MAX_DOMAIN_LENGTH) {
+function validateDomainPart(domain: string): ValidationResult | undefined {
+	if (domain === "") return { valid: false, reason: "Domain part is empty" }
+	if (domain.length > MAX_DOMAIN_LENGTH) {
 		return {
 			valid: false,
-			reason: `Domain part is too long (${domainPart.length} chars, max ${MAX_DOMAIN_LENGTH})`,
+			reason: `Domain part is too long (${domain.length} chars, max ${MAX_DOMAIN_LENGTH})`,
 		}
 	}
-
-	if (domainPart.startsWith(".")) {
-		return { valid: false, reason: "Domain part starts with a dot" }
-	}
-
-	if (domainPart.endsWith(".")) {
-		return { valid: false, reason: "Domain part ends with a dot" }
-	}
-
-	if (domainPart.includes("..")) {
+	if (domain.startsWith(".")) return { valid: false, reason: "Domain part starts with a dot" }
+	if (domain.endsWith(".")) return { valid: false, reason: "Domain part ends with a dot" }
+	if (domain.includes(".."))
 		return { valid: false, reason: "Domain part contains consecutive dots" }
-	}
-
-	if (!domainPart.includes(".")) {
-		return {
-			valid: false,
-			reason: "Domain part does not contain a dot (TLD required)",
-		}
-	}
-
-	const labels = domainPart.split(".")
-	for (const label of labels) {
-		if (label === "") {
-			return { valid: false, reason: "Domain part contains an empty label" }
-		}
+	if (!domain.includes("."))
+		return { valid: false, reason: "Domain part does not contain a dot (TLD required)" }
+	for (const label of domain.split(".")) {
+		if (label === "") return { valid: false, reason: "Domain part contains an empty label" }
 		if (label.length > MAX_LABEL_LENGTH) {
 			return {
 				valid: false,
@@ -102,8 +69,6 @@ export function validateEmail(address: string): ValidationResult {
 			}
 		}
 	}
-
-	return { valid: true }
 }
 
 export function validateEmailBatch(addresses: string[]): Map<string, ValidationResult> {

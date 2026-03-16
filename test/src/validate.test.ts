@@ -264,7 +264,7 @@ describe("validateEmail", () => {
 	})
 
 	describe("IP literal domain (RFC 5321)", () => {
-		it("should reject bare IP without brackets", () => {
+		it("should accept bare IP (treated as dotted domain labels)", () => {
 			const result = validateEmail("user@192.168.1.1")
 			expect(result.valid).toBe(true)
 		})
@@ -281,14 +281,14 @@ describe("validateEmail", () => {
 			expect(result.valid).toBe(true)
 		})
 
-		it("should accept domain label starting with hyphen (validation does not check this)", () => {
+		it("should accept domain label starting with hyphen (not checked by current validator)", () => {
 			const result = validateEmail("user@-domain.com")
-			expect([true, false]).toContain(result.valid)
+			expect(result.valid).toBe(true)
 		})
 
-		it("should accept/reject domain label ending with hyphen", () => {
+		it("should accept domain label ending with hyphen (not checked by current validator)", () => {
 			const result = validateEmail("user@domain-.com")
-			expect([true, false]).toContain(result.valid)
+			expect(result.valid).toBe(true)
 		})
 	})
 

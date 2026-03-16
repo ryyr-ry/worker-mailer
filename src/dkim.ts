@@ -8,6 +8,7 @@ import {
 	selectDefaultHeaders,
 } from "./dkim-canonicalize"
 import { DkimError } from "./errors"
+import { arrayBufferToBase64, encode } from "./utils"
 
 export {
 	canonicalizeRelaxedBody,
@@ -72,24 +73,13 @@ function splitMessage(raw: string): { headers: string; body: string } {
 	return { headers: raw.substring(0, idx), body: raw.substring(idx + 4) }
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-	const bytes = new Uint8Array(buffer)
-	let binary = ""
-	for (let i = 0; i < bytes.length; i++) {
-		binary += String.fromCharCode(bytes[i])
-	}
-	return btoa(binary)
-}
-
 async function hashBody(canonicalizedBody: string): Promise<string> {
-	const encoded = new TextEncoder().encode(canonicalizedBody)
-	const digest = await crypto.subtle.digest("SHA-256", encoded)
+	const digest = await crypto.subtle.digest("SHA-256", encode(canonicalizedBody))
 	return arrayBufferToBase64(digest)
 }
 
 async function rsaSign(key: CryptoKey, data: string): Promise<string> {
-	const encoded = new TextEncoder().encode(data)
-	const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, encoded)
+	const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, encode(data))
 	return arrayBufferToBase64(signature)
 }
 

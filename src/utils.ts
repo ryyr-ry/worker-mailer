@@ -99,72 +99,54 @@ export function decode(data: Uint8Array): string {
 	return decoder.decode(data)
 }
 
+function encodeQpByte(byte: number, isTrailingWhitespace: boolean): string {
+	const isWhitespace = byte === 0x20 || byte === 0x09
+	const needsEncoding =
+		(byte < 32 && !isWhitespace) ||
+		byte > 126 ||
+		byte === 61 ||
+		(isWhitespace && isTrailingWhitespace)
+	if (needsEncoding) return `=${byte.toString(16).toUpperCase().padStart(2, "0")}`
+	return String.fromCharCode(byte)
+}
+
 export function encodeQuotedPrintable(text: string, lineLength = 76): string {
 	const bytes = encode(text)
 	let result = ""
-	let currentLineLength = 0
+	let lineLen = 0
 	let i = 0
 
 	while (i < bytes.length) {
 		const byte = bytes[i]
-		let encoded: string | undefined
-
-		// Handle line breaks (LF, CR, CRLF)
 		if (byte === 0x0a) {
-			// LF
 			result += "\r\n"
-			currentLineLength = 0
+			lineLen = 0
 			i++
 			continue
-		} else if (byte === 0x0d) {
-			// CR
+		}
+		if (byte === 0x0d) {
 			if (i + 1 < bytes.length && bytes[i + 1] === 0x0a) {
-				// CRLF
 				result += "\r\n"
-				currentLineLength = 0
+				lineLen = 0
 				i += 2
 				continue
-			} else {
-				// Standalone CR - encode it
-				encoded = "=0D"
 			}
 		}
-
-		// If not already encoded (e.g., standalone CR), check if encoding is needed
-		if (encoded === undefined) {
-			// Check if this is trailing whitespace (space or tab at end of line)
-			const isWhitespace = byte === 0x20 || byte === 0x09
-			const nextIsLineBreak =
-				i + 1 >= bytes.length || bytes[i + 1] === 0x0a || bytes[i + 1] === 0x0d
-
-			// Encode if:
-			// 1. Non-printable (< 32 or > 126, excluding space and tab)
-			// 2. Equals sign (=)
-			// 3. Trailing whitespace (space or tab before line break or end of text)
-			const needsEncoding =
-				(byte < 32 && !isWhitespace) || // Control characters (but not space/tab)
-				byte > 126 || // Non-ASCII
-				byte === 61 || // Equals sign
-				(isWhitespace && nextIsLineBreak) // Trailing whitespace
-
-			if (needsEncoding) {
-				encoded = `=${byte.toString(16).toUpperCase().padStart(2, "0")}`
-			} else {
-				encoded = String.fromCharCode(byte)
-			}
-		}
-
-		const newLength = currentLineLength + encoded.length
-		const hasMoreBytes = i + 1 < bytes.length
-		if (newLength > lineLength || (newLength === lineLength && hasMoreBytes)) {
+		const encoded =
+			byte === 0x0d
+				? "=0D"
+				: encodeQpByte(
+						byte,
+						i + 1 >= bytes.length || bytes[i + 1] === 0x0a || bytes[i + 1] === 0x0d,
+					)
+		const newLen = lineLen + encoded.length
+		if (newLen > lineLength || (newLen === lineLength && i + 1 < bytes.length)) {
 			result += "=\r\n"
-			currentLineLength = 0
+			lineLen = 0
 		}
-
 		result += encoded
-		currentLineLength += encoded.length
+		lineLen += encoded.length
 		i++
 	}
-
 	return result
 }
