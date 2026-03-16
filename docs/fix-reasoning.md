@@ -89,3 +89,43 @@ base64エンコードされて送信される。これらは:
 **影響範囲:** `src/logger.ts`の`sanitize()`メソッドと関連パターン定数
 
 ---
+
+## フェーズ2: P1アーキテクチャ修正
+
+### #5 close()/executeSend()レースコンディション (P1)
+
+**問題の本質:**
+JavaScript（Workers）はシングルスレッドだが、async/awaitによるインターリーブで
+レースコンディションが発生する。具体的には:
+1. `executeSend()`が`await mailFrom()`等でsuspend中
+2. その間に外部から`close()`が呼ばれる
+3. `close()`は即座に`transport.quit()`を呼ぶ
+4. `executeSend()`が再開すると、閉じられたトランスポートで操作を試みる
+
+**修正方針:**
+- `sendingPromise`フィールドを追加し、現在の送信処理を追跡
+- `start()`で`processEmailWithRetry()`の戻り値をsendingPromiseに保存
+- `close()`は`sendingPromise`をawaitしてからtransport.quit()を実行
+- これにより送信中のトランスポートを安全にシャットダウンできる
+
+**影響範囲:** `src/mailer/worker-mailer.ts`の`close()`, `start()`
+
+---
+
+### #6 RSET失敗時の無意味リトライ (P1)
+
+**問題の本質:**
+`handleSendFailure()`でRSETが失敗した場合、以下のフローで問題が発生:
+- `autoReconnect=false`かつ`attempt < maxRetries`の場合
+- catchブロック内の2つのif文を両方スキップ
+- catchブロックを抜けてL208のbackoff+return falseに到達
+- 壊れた接続でリトライを続ける（無意味）
+
+RSETの失敗 = 接続が壊れている。再接続できないなら即座に終了すべき。
+
+**修正方針:**
+- catchブロック内で、再接続に成功しなかった場合は常にエラーで終了
+- 2つ目のif文の`attempt >= maxRetries`条件を削除し、
+  再接続不可なら常にclose+fatalエラーとする
+
+**影響範囲:** `src/mailer/worker-mailer.ts`の`handleSendFailure()`

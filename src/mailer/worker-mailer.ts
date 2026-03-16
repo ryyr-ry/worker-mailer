@@ -44,6 +44,7 @@ export class WorkerMailer implements Mailer {
 	private dkimKey?: CryptoKey
 	private active = false
 	private emailSending: Email | null = null
+	private sendingPromise: Promise<void> | null = null
 	private emailToBeSent = new BlockingQueue<Email>()
 	private constructor(options: WorkerMailerOptions) {
 		this.port = options.port
@@ -129,7 +130,9 @@ export class WorkerMailer implements Mailer {
 			} catch {
 				break
 			}
-			await this.processEmailWithRetry()
+			this.sendingPromise = this.processEmailWithRetry()
+			await this.sendingPromise
+			this.sendingPromise = null
 			this.emailSending = null
 		}
 	}
@@ -197,13 +200,11 @@ export class WorkerMailer implements Mailer {
 				await backoff(attempt)
 				return false
 			}
-			if (attempt >= this.maxRetries) {
-				this.emailSending.setSentError(e)
-				const fatal = rsetError instanceof Error ? rsetError : new Error(String(rsetError))
-				await this.close(fatal)
-				this.reportFatalError(fatal)
-				return true
-			}
+			this.emailSending.setSentError(e)
+			const fatal = rsetError instanceof Error ? rsetError : new Error(String(rsetError))
+			await this.close(fatal)
+			this.reportFatalError(fatal)
+			return true
 		}
 		if (attempt < this.maxRetries) await backoff(attempt)
 		return false
@@ -243,6 +244,9 @@ export class WorkerMailer implements Mailer {
 		this.emailSending?.setSentError?.(err)
 		while (this.emailToBeSent.length > 0) (await this.emailToBeSent.dequeue()).setSentError(err)
 		this.emailToBeSent.close()
+		if (this.sendingPromise) {
+			await this.sendingPromise.catch(() => {})
+		}
 		try {
 			await this.transport.quit()
 		} catch {}
