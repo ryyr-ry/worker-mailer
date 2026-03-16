@@ -1341,7 +1341,7 @@ describe("Email", () => {
 			const data = email.getRawMessage()
 			const dateLine = data.split("\r\n").find((l) => l.startsWith("Date:"))
 			expect(dateLine).toBeDefined()
-			const dateValue = dateLine?.replace("Date: ", "")
+			const dateValue = dateLine!.replace("Date: ", "")
 			expect(new Date(dateValue).getTime()).not.toBeNaN()
 		})
 
@@ -1847,7 +1847,7 @@ describe("encodeHeader", () => {
 					}
 				}
 				// TextDecoder throws an error on invalid UTF-8 byte sequences
-				const decoder = new TextDecoder("utf-8", { fatal: true })
+				const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false })
 				expect(() => decoder.decode(new Uint8Array(bytes))).not.toThrow()
 			}
 		})
@@ -1873,7 +1873,7 @@ describe("encodeHeader", () => {
 						i += 1
 					}
 				}
-				const decoder = new TextDecoder("utf-8", { fatal: true })
+				const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false })
 				expect(() => decoder.decode(new Uint8Array(bytes))).not.toThrow()
 			}
 		})
@@ -1899,7 +1899,7 @@ describe("encodeHeader", () => {
 						i += 1
 					}
 				}
-				const decoder = new TextDecoder("utf-8", { fatal: true })
+				const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false })
 				expect(() => decoder.decode(new Uint8Array(bytes))).not.toThrow()
 			}
 		})

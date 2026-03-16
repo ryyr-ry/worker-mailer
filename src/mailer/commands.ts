@@ -121,12 +121,9 @@ export function buildNotify(dsnGlobal?: DsnParam, dsnOverride?: DsnOptions): str
 }
 
 export function buildRet(dsnGlobal?: DsnParam, dsnOverride?: DsnOptions): string {
-	const ret: string[] = []
-	if (dsnOverride?.RET?.HEADERS || (!dsnOverride?.RET && dsnGlobal?.RET?.HEADERS)) {
-		ret.push("HDRS")
-	}
-	if (dsnOverride?.RET?.FULL || (!dsnOverride?.RET && dsnGlobal?.RET?.FULL)) {
-		ret.push("FULL")
-	}
-	return ret.length > 0 ? `RET=${ret.join(",")}` : ""
+	const ret = dsnOverride?.RET ?? dsnGlobal?.RET
+	if (!ret) return ""
+	if (ret.FULL) return "RET=FULL"
+	if (ret.HEADERS) return "RET=HDRS"
+	return ""
 }
