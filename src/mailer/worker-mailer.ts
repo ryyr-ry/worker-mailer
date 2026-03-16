@@ -43,7 +43,6 @@ export class WorkerMailer implements Mailer {
 	private dkimKey?: CryptoKey
 	private active = false
 	private emailSending: Email | null = null
-	private sendingPromise: Promise<void> | null = null
 	private emailToBeSent = new BlockingQueue<Email>()
 	private constructor(options: WorkerMailerOptions) {
 		this.port = options.port
@@ -115,9 +114,7 @@ export class WorkerMailer implements Mailer {
 			} catch {
 				break
 			}
-			this.sendingPromise = this.processEmailWithRetry()
-			await this.sendingPromise
-			this.sendingPromise = null
+			await this.processEmailWithRetry()
 			this.emailSending = null
 		}
 	}
@@ -138,7 +135,9 @@ export class WorkerMailer implements Mailer {
 			this.emailSending.setSentError(error)
 			try {
 				await this.hooks?.onSendError?.(this.emailSending.options, error)
-			} catch {}
+			} catch (hookErr) {
+				this.logger.error("[WorkerMailer] onSendError hook error", hookErr)
+			}
 		}
 	}
 	private get dsnCtx() {
@@ -169,7 +168,9 @@ export class WorkerMailer implements Mailer {
 		email.setSentResult(result)
 		try {
 			await this.hooks?.afterSend?.(email.options, result)
-		} catch {}
+		} catch (hookErr) {
+			this.logger.error("[WorkerMailer] afterSend hook error", hookErr)
+		}
 	}
 	private async handleSendFailure(e: unknown, attempt: number): Promise<boolean> {
 		if (!this.emailSending) return true
