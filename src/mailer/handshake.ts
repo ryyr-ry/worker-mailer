@@ -1,10 +1,11 @@
+import { SmtpCommandError, SmtpConnectionError } from "../errors"
 import type { SmtpTransport } from "./transport"
 import type { SmtpCapabilities } from "./types"
 
 export async function greet(transport: SmtpTransport): Promise<void> {
 	const response = await transport.readTimeout()
 	if (!response.startsWith("220")) {
-		throw new Error(
+		throw new SmtpConnectionError(
 			`[WorkerMailer] Connection failed: unexpected greeting from SMTP server: ${response}`,
 		)
 	}
@@ -44,7 +45,7 @@ export async function ehlo(transport: SmtpTransport, hostname: string): Promise<
 	await transport.writeLine(`EHLO ${hostname}`)
 	const response = await transport.readTimeout()
 	if (response.startsWith("421")) {
-		throw new Error(`[WorkerMailer] EHLO failed: ${response}`)
+		throw new SmtpCommandError("EHLO", response)
 	}
 	if (!response.startsWith("2")) {
 		await helo(transport, hostname)
@@ -64,14 +65,14 @@ export async function helo(transport: SmtpTransport, hostname: string): Promise<
 	if (response.startsWith("2")) {
 		return
 	}
-	throw new Error(`[WorkerMailer] HELO failed: ${response}`)
+	throw new SmtpCommandError("HELO", response)
 }
 
 export async function startTls(transport: SmtpTransport): Promise<void> {
 	await transport.writeLine("STARTTLS")
 	const response = await transport.readTimeout()
 	if (!response.startsWith("220")) {
-		throw new Error(`[WorkerMailer] STARTTLS failed: ${response}`)
+		throw new SmtpCommandError("STARTTLS", response)
 	}
 	transport.upgradeTls()
 }

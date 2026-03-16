@@ -1,3 +1,4 @@
+import { SmtpAuthError } from "../errors"
 import type Logger from "../logger"
 import { encode, toBase64 } from "../utils"
 import type { SmtpTransport } from "./transport"
@@ -23,7 +24,7 @@ export async function authenticate(
 	) {
 		await authCramMd5(transport, credentials, logger)
 	} else {
-		throw new Error("[WorkerMailer] No supported authentication method found")
+		throw new SmtpAuthError("[WorkerMailer] No supported authentication method found")
 	}
 }
 
@@ -32,7 +33,7 @@ async function authPlain(transport: SmtpTransport, credentials: Credentials): Pr
 	await transport.writeLine(`AUTH PLAIN ${userPassBase64}`)
 	const authResult = await transport.readTimeout()
 	if (!authResult.startsWith("2")) {
-		throw new Error(`[WorkerMailer] PLAIN authentication failed: ${authResult}`)
+		throw new SmtpAuthError(`[WorkerMailer] PLAIN authentication failed: ${authResult}`)
 	}
 }
 
@@ -40,21 +41,21 @@ async function authLogin(transport: SmtpTransport, credentials: Credentials): Pr
 	await transport.writeLine("AUTH LOGIN")
 	const startLoginResponse = await transport.readTimeout()
 	if (!startLoginResponse.startsWith("3")) {
-		throw new Error(`[WorkerMailer] LOGIN authentication failed: ${startLoginResponse}`)
+		throw new SmtpAuthError(`[WorkerMailer] LOGIN authentication failed: ${startLoginResponse}`)
 	}
 
 	const usernameBase64 = toBase64(credentials.username)
 	await transport.writeLine(usernameBase64)
 	const userResponse = await transport.readTimeout()
 	if (!userResponse.startsWith("3")) {
-		throw new Error(`[WorkerMailer] LOGIN authentication failed: ${userResponse}`)
+		throw new SmtpAuthError(`[WorkerMailer] LOGIN authentication failed: ${userResponse}`)
 	}
 
 	const passwordBase64 = toBase64(credentials.password)
 	await transport.writeLine(passwordBase64)
 	const authResult = await transport.readTimeout()
 	if (!authResult.startsWith("2")) {
-		throw new Error(`[WorkerMailer] LOGIN authentication failed: ${authResult}`)
+		throw new SmtpAuthError(`[WorkerMailer] LOGIN authentication failed: ${authResult}`)
 	}
 }
 
@@ -73,7 +74,7 @@ async function authCramMd5(
 		.match(/^334\s+(.+)$/)
 		?.pop()
 	if (!challengeWithBase64Encoded) {
-		throw new Error(
+		throw new SmtpAuthError(
 			`[WorkerMailer] CRAM-MD5 authentication failed: invalid challenge: ${challengeResponse}`,
 		)
 	}
@@ -95,6 +96,6 @@ async function authCramMd5(
 	await transport.writeLine(toBase64(`${credentials.username} ${challengeSolved}`))
 	const authResult = await transport.readTimeout()
 	if (!authResult.startsWith("2")) {
-		throw new Error(`[WorkerMailer] CRAM-MD5 authentication failed: ${authResult}`)
+		throw new SmtpAuthError(`[WorkerMailer] CRAM-MD5 authentication failed: ${authResult}`)
 	}
 }

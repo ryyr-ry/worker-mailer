@@ -1,3 +1,5 @@
+import { QueueClosedError } from "./errors"
+
 export class BlockingQueue<T> {
 	private values: Promise<T>[] = []
 	private resolvers: ((value: T) => void)[] = []
@@ -6,7 +8,7 @@ export class BlockingQueue<T> {
 
 	public enqueue(value: T) {
 		if (this._closed) {
-			throw new Error("Queue is closed")
+			throw new QueueClosedError()
 		}
 		if (!this.resolvers.length) {
 			this.addWrapper()
@@ -17,7 +19,7 @@ export class BlockingQueue<T> {
 
 	public async dequeue(): Promise<T> {
 		if (this._closed) {
-			throw new Error("Queue is closed")
+			throw new QueueClosedError()
 		}
 		if (!this.values.length) {
 			this.addWrapper()
@@ -39,7 +41,7 @@ export class BlockingQueue<T> {
 
 	public close() {
 		this._closed = true
-		this.rejectAll(new Error("Queue is closed"))
+		this.rejectAll(new QueueClosedError())
 	}
 
 	private rejectAll(reason: Error) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { sendBatch } from "../../src/batch"
 import type { EmailOptions } from "../../src/email"
+import { SmtpConnectionError } from "../../src/errors"
 import type { Mailer } from "../../src/mailer"
 import { MockMailer } from "../../src/mock"
 
@@ -69,7 +70,7 @@ describe("MockMailer", () => {
 	it("send() after close() throws error", async () => {
 		const mailer = new MockMailer()
 		await mailer.close()
-		await expect(mailer.send(baseEmail)).rejects.toThrow("[MockMailer] Not connected")
+		await expect(mailer.send(baseEmail)).rejects.toThrow(SmtpConnectionError)
 	})
 
 	it("clear() resets sent history", async () => {

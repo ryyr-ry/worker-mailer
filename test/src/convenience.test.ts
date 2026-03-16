@@ -1,6 +1,7 @@
 import { connect } from "cloudflare:sockets"
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 import { createFromEnv, fromEnv, preset, sendOnce } from "../../src/convenience"
+import { ConfigurationError } from "../../src/errors"
 
 vi.mock("cloudflare:sockets", () => ({
 	connect: vi.fn(),
@@ -47,17 +48,17 @@ describe("convenience", () => {
 
 		it("should throw error when SMTP_HOST is not set", () => {
 			const env = { SMTP_PORT: "587" }
-			expect(() => fromEnv(env)).toThrow("SMTP_HOST")
+			expect(() => fromEnv(env)).toThrow(ConfigurationError)
 		})
 
 		it("should throw error when SMTP_PORT is not set", () => {
 			const env = { SMTP_HOST: "smtp.example.com" }
-			expect(() => fromEnv(env)).toThrow("SMTP_PORT")
+			expect(() => fromEnv(env)).toThrow(ConfigurationError)
 		})
 
 		it("should throw error when SMTP_PORT is not a number", () => {
 			const env = { SMTP_HOST: "smtp.example.com", SMTP_PORT: "abc" }
-			expect(() => fromEnv(env)).toThrow("not a valid port number")
+			expect(() => fromEnv(env)).toThrow(ConfigurationError)
 		})
 
 		it("should parse SMTP_SECURE values correctly", () => {
@@ -340,7 +341,7 @@ describe("convenience", () => {
 
 		it("should throw error when required variable is missing with custom prefix", () => {
 			const env = { MAIL_HOST: "smtp.custom.com" }
-			expect(() => fromEnv(env, "MAIL_")).toThrow("MAIL_PORT")
+			expect(() => fromEnv(env, "MAIL_")).toThrow(ConfigurationError)
 		})
 	})
 

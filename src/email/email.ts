@@ -1,3 +1,4 @@
+import { CrlfInjectionError, EmailValidationError } from "../errors"
 import type { SendResult } from "../result"
 import { validateEmail as checkEmail } from "../validate"
 import { resolveHeaders } from "./header"
@@ -48,7 +49,7 @@ export class Email {
 		this.sent.catch(() => {})
 
 		if (!options.text && !options.html) {
-			throw new Error("At least one of text or html must be provided")
+			throw new EmailValidationError("At least one of text or html must be provided")
 		}
 
 		if (typeof options.from === "string") {
@@ -94,7 +95,7 @@ export class Email {
 
 	private validateNoCRLF() {
 		if (Email.CRLF_PATTERN.test(this.subject)) {
-			throw new Error("CRLF injection detected in subject")
+			throw new CrlfInjectionError("subject")
 		}
 		this.validateUserNoCRLF(this.from, "from")
 		if (this.to) for (const u of this.to) this.validateUserNoCRLF(u, "to")
@@ -104,14 +105,14 @@ export class Email {
 
 		for (const [key, value] of Object.entries(this.headers)) {
 			if (Email.CRLF_PATTERN.test(key) || Email.CRLF_PATTERN.test(value)) {
-				throw new Error(`CRLF injection detected in header: ${key}`)
+				throw new CrlfInjectionError(`header: ${key}`)
 			}
 		}
 	}
 
 	private validateUserNoCRLF(user: { name?: string; email: string }, field: string) {
 		if (user.name && Email.CRLF_PATTERN.test(user.name)) {
-			throw new Error(`CRLF injection detected in ${field} display name`)
+			throw new CrlfInjectionError(`${field} display name`)
 		}
 	}
 
@@ -139,11 +140,11 @@ export class Email {
 
 	private validateEmail(email: string, field: string) {
 		if (Email.ANGLE_BRACKET_PATTERN.test(email)) {
-			throw new Error(`Invalid email address in ${field}: ${email}`)
+			throw new EmailValidationError(`Invalid email address in ${field}: ${email}`)
 		}
 		const result = checkEmail(email)
 		if (!result.valid) {
-			throw new Error(`Invalid email address in ${field}: ${email}`)
+			throw new EmailValidationError(`Invalid email address in ${field}: ${email}`)
 		}
 	}
 
@@ -160,33 +161,35 @@ export class Email {
 
 	private static validateAttachmentEntry(attachment: Attachment | InlineAttachment) {
 		if (Email.UNSAFE_FILENAME_PATTERN.test(attachment.filename)) {
-			throw new Error(
+			throw new EmailValidationError(
 				`Invalid attachment filename: ${attachment.filename.replaceAll(/[\r\n]/g, "?")}`,
 			)
 		}
 		if (typeof attachment.content === "string" && !Email.BASE64_PATTERN.test(attachment.content)) {
-			throw new Error(`Invalid base64 content in attachment: ${attachment.filename}`)
+			throw new EmailValidationError(`Invalid base64 content in attachment: ${attachment.filename}`)
 		}
 	}
 
 	private validateInlineAttachments() {
 		if (!this.inlineAttachments) return
 		if (!this.html) {
-			throw new Error("Inline attachments require HTML content")
+			throw new EmailValidationError("Inline attachments require HTML content")
 		}
 		const cids = new Set<string>()
 		for (const inline of this.inlineAttachments) {
 			if (!inline.cid || inline.cid.length === 0) {
-				throw new Error("Inline attachment CID must not be empty")
+				throw new EmailValidationError("Inline attachment CID must not be empty")
 			}
 			if (/[<>]/.test(inline.cid)) {
-				throw new Error(`Inline attachment CID must not contain angle brackets: ${inline.cid}`)
+				throw new EmailValidationError(
+					`Inline attachment CID must not contain angle brackets: ${inline.cid}`,
+				)
 			}
 			if (/[\r\n]/.test(inline.cid)) {
-				throw new Error("CRLF injection detected in inline attachment CID")
+				throw new CrlfInjectionError("inline attachment CID")
 			}
 			if (cids.has(inline.cid)) {
-				throw new Error(`Duplicate inline attachment CID: ${inline.cid}`)
+				throw new EmailValidationError(`Duplicate inline attachment CID: ${inline.cid}`)
 			}
 			cids.add(inline.cid)
 			Email.validateAttachmentEntry(inline)
@@ -196,7 +199,7 @@ export class Email {
 	private validateCalendarEvent() {
 		if (!this.calendarEvent) return
 		if (!this.calendarEvent.content || this.calendarEvent.content.length === 0) {
-			throw new Error("Calendar event content must not be empty")
+			throw new EmailValidationError("Calendar event content must not be empty")
 		}
 	}
 

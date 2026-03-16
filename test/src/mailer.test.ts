@@ -1,5 +1,12 @@
 import { connect } from "cloudflare:sockets"
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
+import {
+	CrlfInjectionError,
+	EmailValidationError,
+	SmtpAuthError,
+	SmtpCommandError,
+	SmtpConnectionError,
+} from "../../src/errors"
 import { WorkerMailer, WorkerMailerPool } from "../../src/mailer"
 
 vi.mock("cloudflare:sockets", () => ({
@@ -180,7 +187,7 @@ describe("WorkerMailer", () => {
 					port: 587,
 					socketTimeoutMs: 100,
 				}),
-			).rejects.toThrow("[WorkerMailer] Connection timeout: socket connection timed out")
+			).rejects.toThrow(SmtpConnectionError)
 		})
 
 		it("should use responseTimeoutMs independently from socketTimeoutMs", async () => {
@@ -397,7 +404,7 @@ describe("WorkerMailer", () => {
 					password: "wrong",
 					authType: ["plain"],
 				}),
-			).rejects.toThrow("[WorkerMailer] PLAIN authentication failed")
+			).rejects.toThrow(SmtpAuthError)
 		})
 	})
 
@@ -731,7 +738,7 @@ describe("WorkerMailer", () => {
 				text: "Hello World",
 			})
 
-			await expect(sendPromise).rejects.toThrow("[WorkerMailer] RCPT TO failed")
+			await expect(sendPromise).rejects.toThrow(SmtpCommandError)
 		})
 	})
 
@@ -802,7 +809,7 @@ describe("WorkerMailer", () => {
 					subject: "test",
 					text: "test",
 				}),
-			).rejects.toThrow(/Connection closed/)
+			).rejects.toThrow(SmtpConnectionError)
 
 			await mailer.close()
 		})
@@ -836,7 +843,7 @@ describe("WorkerMailer", () => {
 					subject: "test",
 					text: "test",
 				}),
-			).rejects.toThrow(/Invalid email address/)
+			).rejects.toThrow(EmailValidationError)
 
 			await mailer.close()
 		})
@@ -875,7 +882,7 @@ describe("WorkerMailer", () => {
 					subject: "test",
 					text: "test",
 				}),
-			).rejects.toThrow(/Invalid email address/)
+			).rejects.toThrow(EmailValidationError)
 
 			await mailer.close()
 		})
@@ -911,7 +918,7 @@ describe("WorkerMailer", () => {
 					text: "test",
 					dsnOverride: { envelopeId: "id\r\nRCPT TO: <victim@evil.com>" },
 				}),
-			).rejects.toThrow(/CRLF injection/)
+			).rejects.toThrow(CrlfInjectionError)
 
 			await mailer.close()
 		})
@@ -1110,7 +1117,7 @@ describe("WorkerMailer", () => {
 				text: "Hello",
 			})
 
-			await expect(sendPromise).rejects.toThrow("[WorkerMailer] MAIL FROM failed")
+			await expect(sendPromise).rejects.toThrow(SmtpCommandError)
 
 			// onFatalError is called asynchronously in start()'s catch, so wait a bit
 			await new Promise<void>((resolve) => setTimeout(resolve, 50))
@@ -1158,7 +1165,7 @@ describe("WorkerMailer", () => {
 					subject: "Test",
 					text: "After close",
 				}),
-			).rejects.toThrow("[WorkerMailer] Send failed: mailer is closed")
+			).rejects.toThrow(SmtpConnectionError)
 		})
 
 		it("should reject queued emails' sent promises when close() is called", async () => {
@@ -1712,7 +1719,7 @@ describe("WorkerMailerPool", () => {
 					subject: "Test",
 					text: "Hello",
 				}),
-			).rejects.toThrow("[WorkerMailerPool] Send failed: pool is not connected")
+			).rejects.toThrow(SmtpConnectionError)
 		})
 	})
 

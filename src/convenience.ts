@@ -1,4 +1,5 @@
 import type { EmailOptions } from "./email"
+import { ConfigurationError } from "./errors"
 import { LogLevel } from "./logger"
 import type { AuthType, WorkerMailerOptions } from "./mailer"
 import { WorkerMailer } from "./mailer"
@@ -13,7 +14,7 @@ function getString(env: Record<string, unknown>, key: string): string | undefine
 function requireString(env: Record<string, unknown>, key: string): string {
 	const value = getString(env, key)
 	if (value === undefined || value === "") {
-		throw new Error(
+		throw new ConfigurationError(
 			`Environment variable ${key} is not set. Please check the required SMTP environment variables.`,
 		)
 	}
@@ -54,7 +55,7 @@ export function fromEnv(env: Record<string, unknown>, prefix = "SMTP_"): WorkerM
 	const portStr = requireString(env, `${prefix}PORT`)
 	const port = Number.parseInt(portStr, 10)
 	if (Number.isNaN(port)) {
-		throw new Error(
+		throw new ConfigurationError(
 			`Environment variable ${prefix}PORT value "${portStr}" is not a valid port number.`,
 		)
 	}

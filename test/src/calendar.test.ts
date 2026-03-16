@@ -7,6 +7,7 @@ import {
 	formatDateUtc,
 } from "../../src/calendar"
 import { Email } from "../../src/email/email"
+import { CalendarValidationError } from "../../src/errors"
 
 function baseOptions(overrides?: Partial<CalendarEventOptions>): CalendarEventOptions {
 	return {
@@ -144,21 +145,19 @@ describe("Calendar invites", () => {
 		it("throws on start >= end", () => {
 			const sameTime = new Date("2025-03-15T10:00:00Z")
 			expect(() => createCalendarEvent(baseOptions({ start: sameTime, end: sameTime }))).toThrow(
-				"[Calendar] start must be before end",
+				CalendarValidationError,
 			)
 
 			const reversed = {
 				start: new Date("2025-03-15T11:00:00Z"),
 				end: new Date("2025-03-15T10:00:00Z"),
 			}
-			expect(() => createCalendarEvent(baseOptions(reversed))).toThrow(
-				"[Calendar] start must be before end",
-			)
+			expect(() => createCalendarEvent(baseOptions(reversed))).toThrow(CalendarValidationError)
 		})
 
 		it("throws on empty summary", () => {
 			expect(() => createCalendarEvent(baseOptions({ summary: "   " }))).toThrow(
-				"[Calendar] summary must not be empty",
+				CalendarValidationError,
 			)
 		})
 

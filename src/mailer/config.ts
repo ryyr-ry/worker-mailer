@@ -1,3 +1,4 @@
+import { ConfigurationError } from "../errors"
 import type { WorkerMailerOptions } from "./types"
 
 export function inferSecurity(options: Pick<WorkerMailerOptions, "port" | "secure" | "startTls">): {
@@ -22,12 +23,12 @@ export function validatePortSecurity(
 	startTlsEnabled: boolean,
 ): void {
 	if (port === 587 && secure) {
-		throw new Error(
+		throw new ConfigurationError(
 			"[WorkerMailer] Invalid configuration: port 587 requires STARTTLS, not implicit TLS (secure: true)",
 		)
 	}
 	if (port === 465 && !secure && startTlsEnabled) {
-		throw new Error(
+		throw new ConfigurationError(
 			"[WorkerMailer] Invalid configuration: port 465 requires implicit TLS (secure: true), not STARTTLS",
 		)
 	}

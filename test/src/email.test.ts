@@ -4,6 +4,7 @@ import { Email } from "../../src/email/email"
 import { encodeHeader } from "../../src/email/header"
 import { applyDotStuffing } from "../../src/email/mime"
 import type { EmailOptions } from "../../src/email/types"
+import { CrlfInjectionError, EmailValidationError } from "../../src/errors"
 import type { SendResult } from "../../src/result"
 
 describe("Email", () => {
@@ -502,7 +503,7 @@ describe("Email", () => {
 							"X-Custom": "value\r\nBCC: attacker@evil.com",
 						},
 					}),
-			).toThrow(/CRLF/)
+			).toThrow(CrlfInjectionError)
 		})
 
 		it("should reject CRLF in custom header keys", () => {
@@ -517,7 +518,7 @@ describe("Email", () => {
 							"X-Custom\r\nBCC": "attacker@evil.com",
 						},
 					}),
-			).toThrow(/CRLF/)
+			).toThrow(CrlfInjectionError)
 		})
 
 		it("should reject CRLF in subject", () => {
@@ -529,7 +530,7 @@ describe("Email", () => {
 						subject: "test\r\nBCC: attacker@evil.com",
 						text: "test",
 					}),
-			).toThrow(/CRLF/)
+			).toThrow(CrlfInjectionError)
 		})
 
 		it("throws on CRLF in from display name", () => {
@@ -541,7 +542,7 @@ describe("Email", () => {
 						subject: "Test",
 						text: "test",
 					}),
-			).toThrow("CRLF injection detected in from display name")
+			).toThrow(CrlfInjectionError)
 		})
 
 		it("throws on CRLF in to display name", () => {
@@ -553,7 +554,7 @@ describe("Email", () => {
 						subject: "Test",
 						text: "test",
 					}),
-			).toThrow("CRLF injection detected in to display name")
+			).toThrow(CrlfInjectionError)
 		})
 
 		it("throws on CRLF in cc display name", () => {
@@ -566,7 +567,7 @@ describe("Email", () => {
 						subject: "Test",
 						text: "test",
 					}),
-			).toThrow("CRLF injection detected in cc display name")
+			).toThrow(CrlfInjectionError)
 		})
 
 		it("throws on CRLF in reply display name", () => {
@@ -579,7 +580,7 @@ describe("Email", () => {
 						subject: "Test",
 						text: "test",
 					}),
-			).toThrow("CRLF injection detected in reply display name")
+			).toThrow(CrlfInjectionError)
 		})
 
 		it("throws on CRLF in bcc display name", () => {
@@ -592,7 +593,7 @@ describe("Email", () => {
 						subject: "Test",
 						text: "test",
 					}),
-			).toThrow("CRLF injection detected in bcc display name")
+			).toThrow(CrlfInjectionError)
 		})
 
 		it("should allow normal headers without CRLF", () => {
@@ -648,7 +649,7 @@ describe("Email", () => {
 						subject: "test",
 						text: "test",
 					}),
-			).toThrow(/Invalid email address/)
+			).toThrow(EmailValidationError)
 		})
 
 		it("should reject email addresses with angle brackets", () => {
@@ -660,7 +661,7 @@ describe("Email", () => {
 						subject: "test",
 						text: "test",
 					}),
-			).toThrow(/Invalid email address/)
+			).toThrow(EmailValidationError)
 		})
 
 		it("should reject empty email addresses", () => {
@@ -672,7 +673,7 @@ describe("Email", () => {
 						subject: "test",
 						text: "test",
 					}),
-			).toThrow(/Invalid email address/)
+			).toThrow(EmailValidationError)
 		})
 
 		it("should accept valid email addresses", () => {
@@ -702,7 +703,7 @@ describe("Email", () => {
 							},
 						],
 					}),
-			).toThrow(/Invalid attachment filename/)
+			).toThrow(EmailValidationError)
 		})
 
 		it("should reject attachment filenames with CRLF", () => {
@@ -720,7 +721,7 @@ describe("Email", () => {
 							},
 						],
 					}),
-			).toThrow(/Invalid attachment filename/)
+			).toThrow(EmailValidationError)
 		})
 
 		it("should accept safe attachment filenames", () => {
@@ -752,7 +753,7 @@ describe("Email", () => {
 							},
 						],
 					}),
-			).toThrow(/Invalid base64 content in attachment/)
+			).toThrow(EmailValidationError)
 		})
 
 		it("should reject attachment with base64 content containing angle brackets", () => {
@@ -770,7 +771,7 @@ describe("Email", () => {
 							},
 						],
 					}),
-			).toThrow(/Invalid base64 content in attachment/)
+			).toThrow(EmailValidationError)
 		})
 
 		it("should accept attachment with valid base64 content", () => {

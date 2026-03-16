@@ -1,4 +1,5 @@
 import type { CalendarEventPart } from "./email/types"
+import { CalendarValidationError } from "./errors"
 
 export type CalendarEventOptions = {
 	summary: string
@@ -49,10 +50,10 @@ export function createCalendarEvent(options: CalendarEventOptions): CalendarEven
 
 function validateCalendarOptions(options: CalendarEventOptions): void {
 	if (!options.summary.trim()) {
-		throw new Error("[Calendar] summary must not be empty")
+		throw new CalendarValidationError("[Calendar] summary must not be empty")
 	}
 	if (options.start >= options.end) {
-		throw new Error("[Calendar] start must be before end")
+		throw new CalendarValidationError("[Calendar] start must be before end")
 	}
 }
 

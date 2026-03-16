@@ -1,5 +1,6 @@
 import type { DkimOptions } from "../dkim"
 import type { DsnOptions, EmailOptions } from "../email/types"
+import { WorkerMailerError } from "../errors"
 import type { LogLevel } from "../logger"
 import type { SendResult } from "../result"
 
@@ -29,7 +30,7 @@ export type SendHooks = {
 	onFatalError?: (error: Error) => void
 }
 
-export class SendCancelledError extends Error {
+export class SendCancelledError extends WorkerMailerError {
 	readonly name = "SendCancelledError" as const
 	constructor() {
 		super("Send cancelled by beforeSend hook")

@@ -1,4 +1,5 @@
 import type { EmailOptions } from "./email"
+import { SmtpConnectionError } from "./errors"
 import type { Mailer } from "./mailer"
 import type { SendResult } from "./result"
 
@@ -24,7 +25,7 @@ export class MockMailer implements Mailer {
 	}
 
 	async send(options: EmailOptions): Promise<SendResult> {
-		if (!this._connected) throw new Error("[MockMailer] Not connected")
+		if (!this._connected) throw new SmtpConnectionError("[MockMailer] Not connected")
 		if (this.mockOptions.simulateDelay) {
 			await new Promise<void>((resolve) => setTimeout(resolve, this.mockOptions.simulateDelay))
 		}

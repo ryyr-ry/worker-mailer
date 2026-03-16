@@ -1,5 +1,6 @@
 import * as libqp from "libqp"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { QueueClosedError } from "../../src/errors"
 import {
 	BlockingQueue,
 	backoff,
@@ -74,7 +75,7 @@ describe("BlockingQueue", () => {
 		promise.catch(() => {})
 		queue.close()
 
-		await expect(promise).rejects.toThrow("Queue is closed")
+		await expect(promise).rejects.toThrow(QueueClosedError)
 	})
 
 	it("should return correct values from closed getter before and after close()", () => {
@@ -85,12 +86,12 @@ describe("BlockingQueue", () => {
 
 	it("should throw on enqueue() after close()", () => {
 		queue.close()
-		expect(() => queue.enqueue(1)).toThrow("Queue is closed")
+		expect(() => queue.enqueue(1)).toThrow(QueueClosedError)
 	})
 
 	it("should reject on dequeue() after close()", async () => {
 		queue.close()
-		await expect(queue.dequeue()).rejects.toThrow("Queue is closed")
+		await expect(queue.dequeue()).rejects.toThrow(QueueClosedError)
 	})
 })
 

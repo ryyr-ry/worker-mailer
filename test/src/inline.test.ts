@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { Email } from "../../src/email/email"
+import { CrlfInjectionError, EmailValidationError } from "../../src/errors"
 
 const PNG_1PX =
 	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
@@ -101,7 +102,7 @@ describe("Inline images (CID)", () => {
 					{ cid: "logo", filename: "b.png", content: PNG_1PX },
 				],
 			}),
-		).toThrow("Duplicate inline attachment CID: logo")
+		).toThrow(EmailValidationError)
 	})
 
 	it("inlineAttachments without HTML throws error", () => {
@@ -114,7 +115,7 @@ describe("Inline images (CID)", () => {
 					text: "plain only",
 					inlineAttachments: [{ cid: "logo", filename: "logo.png", content: PNG_1PX }],
 				}),
-		).toThrow("Inline attachments require HTML content")
+		).toThrow(EmailValidationError)
 	})
 
 	it("CRLF in CID throws error", () => {
@@ -122,7 +123,7 @@ describe("Inline images (CID)", () => {
 			makeEmail({
 				inlineAttachments: [{ cid: "logo\r\nEvil: header", filename: "a.png", content: PNG_1PX }],
 			}),
-		).toThrow("CRLF injection detected in inline attachment CID")
+		).toThrow(CrlfInjectionError)
 	})
 
 	it("angle brackets in CID throws error", () => {
@@ -130,7 +131,7 @@ describe("Inline images (CID)", () => {
 			makeEmail({
 				inlineAttachments: [{ cid: "<logo>", filename: "a.png", content: PNG_1PX }],
 			}),
-		).toThrow("must not contain angle brackets")
+		).toThrow(EmailValidationError)
 	})
 
 	it("empty CID throws error", () => {
@@ -138,7 +139,7 @@ describe("Inline images (CID)", () => {
 			makeEmail({
 				inlineAttachments: [{ cid: "", filename: "a.png", content: PNG_1PX }],
 			}),
-		).toThrow("CID must not be empty")
+		).toThrow(EmailValidationError)
 	})
 
 	it("auto-detects MIME type for png, jpg, gif, svg", () => {

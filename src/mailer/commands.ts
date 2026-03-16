@@ -1,4 +1,5 @@
 import type { DsnOptions } from "../email/types"
+import { SmtpCommandError } from "../errors"
 import type { SmtpTransport } from "./transport"
 import type { SmtpCapabilities } from "./types"
 
@@ -21,7 +22,7 @@ export async function mailFrom(
 	await transport.writeLine(message)
 	const response = await transport.readTimeout()
 	if (!response.startsWith("2")) {
-		throw new Error(`[WorkerMailer] MAIL FROM failed: ${message} ${response}`)
+		throw new SmtpCommandError("MAIL FROM", `${message} ${response}`)
 	}
 }
 
@@ -40,7 +41,7 @@ export async function rcptTo(
 		await transport.writeLine(message)
 		const rcptResponse = await transport.readTimeout()
 		if (!rcptResponse.startsWith("2")) {
-			throw new Error(`[WorkerMailer] RCPT TO failed: ${message} ${rcptResponse}`)
+			throw new SmtpCommandError("RCPT TO", `${message} ${rcptResponse}`)
 		}
 	}
 }
@@ -49,7 +50,7 @@ export async function dataCommand(transport: SmtpTransport): Promise<void> {
 	await transport.writeLine("DATA")
 	const response = await transport.readTimeout()
 	if (!response.startsWith("3")) {
-		throw new Error(`[WorkerMailer] DATA command failed: ${response}`)
+		throw new SmtpCommandError("DATA", response)
 	}
 }
 
@@ -57,7 +58,7 @@ export async function sendBody(transport: SmtpTransport, emailData: string): Pro
 	await transport.write(emailData)
 	const response = await transport.readTimeout()
 	if (!response.startsWith("2")) {
-		throw new Error(`[WorkerMailer] Send body failed: ${response}`)
+		throw new SmtpCommandError("Send body", response)
 	}
 	return response
 }
@@ -66,7 +67,7 @@ export async function rset(transport: SmtpTransport): Promise<void> {
 	await transport.writeLine("RSET")
 	const response = await transport.readTimeout()
 	if (!response.startsWith("2")) {
-		throw new Error(`[WorkerMailer] RSET failed: ${response}`)
+		throw new SmtpCommandError("RSET", response)
 	}
 }
 

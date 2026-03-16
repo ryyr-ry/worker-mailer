@@ -3,6 +3,7 @@ import { type DkimOptions, resolveDkimKey, signDkim } from "../dkim"
 import { Email } from "../email/email"
 import { applyDotStuffing } from "../email/mime"
 import type { EmailOptions } from "../email/types"
+import { ConfigurationError, SmtpConnectionError } from "../errors"
 import Logger from "../logger"
 import type { SendResult } from "../result"
 import { BlockingQueue, backoff } from "../utils"
@@ -55,7 +56,9 @@ export class WorkerMailer implements Mailer {
 		if (options.username !== undefined && options.password !== undefined) {
 			this.credentials = { username: options.username, password: options.password }
 		} else if (options.username !== undefined || options.password !== undefined) {
-			throw new Error("[WorkerMailer] Both username and password must be provided together")
+			throw new ConfigurationError(
+				"[WorkerMailer] Both username and password must be provided together",
+			)
 		}
 		this.dsn = options.dsn || {}
 		this.socketTimeoutMs = options.socketTimeoutMs || 60_000
@@ -81,7 +84,7 @@ export class WorkerMailer implements Mailer {
 	}
 	public async send(options: EmailOptions): Promise<SendResult> {
 		if (this.emailToBeSent.closed) {
-			throw new Error("[WorkerMailer] Send failed: mailer is closed")
+			throw new SmtpConnectionError("[WorkerMailer] Send failed: mailer is closed")
 		}
 		let emailOptions = options
 		if (this.hooks?.beforeSend) {
@@ -114,7 +117,9 @@ export class WorkerMailer implements Mailer {
 				this.logger,
 			)
 		} else if (this.capabilities.allowAuth) {
-			throw new Error("[WorkerMailer] Authentication required but no credentials provided")
+			throw new ConfigurationError(
+				"[WorkerMailer] Authentication required but no credentials provided",
+			)
 		}
 		this.active = true
 	}

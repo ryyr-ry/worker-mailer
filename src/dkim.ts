@@ -7,6 +7,7 @@ import {
 	parseHeaders,
 	selectDefaultHeaders,
 } from "./dkim-canonicalize"
+import { DkimError } from "./errors"
 
 export {
 	canonicalizeRelaxedBody,
@@ -41,7 +42,7 @@ function parseCanonicalization(value: Canonicalization): CanonPair {
 
 export async function importDkimKey(pem: string): Promise<CryptoKey> {
 	if (/-----BEGIN RSA PRIVATE KEY-----/.test(pem)) {
-		throw new Error(
+		throw new DkimError(
 			"[DKIM] PKCS#1 format (BEGIN RSA PRIVATE KEY) is not supported. " +
 				"Convert to PKCS#8 (BEGIN PRIVATE KEY) format.",
 		)
@@ -50,7 +51,7 @@ export async function importDkimKey(pem: string): Promise<CryptoKey> {
 		.replace(/-----BEGIN PRIVATE KEY-----/, "")
 		.replace(/-----END PRIVATE KEY-----/, "")
 		.replace(/\s/g, "")
-	if (!pemBody) throw new Error("[DKIM] Private key PEM is empty or invalid")
+	if (!pemBody) throw new DkimError("[DKIM] Private key PEM is empty or invalid")
 	const binaryString = atob(pemBody)
 	const bytes = new Uint8Array(binaryString.length)
 	for (let i = 0; i < binaryString.length; i++) {

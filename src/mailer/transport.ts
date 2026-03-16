@@ -1,3 +1,4 @@
+import { CrlfInjectionError, SmtpConnectionError } from "../errors"
 import type Logger from "../logger"
 import { decode, encode, execTimeout } from "../utils"
 
@@ -21,7 +22,7 @@ export class SmtpTransport {
 		while (true) {
 			const { value, done } = await this.reader.read()
 			if (done) {
-				throw new Error(
+				throw new SmtpConnectionError(
 					"[WorkerMailer] Connection closed: SMTP server closed the connection unexpectedly",
 				)
 			}
@@ -47,7 +48,9 @@ export class SmtpTransport {
 		return execTimeout(
 			this.read(),
 			this.responseTimeoutMs,
-			new Error("[WorkerMailer] Connection timeout: waiting for SMTP server response"),
+			new SmtpConnectionError(
+				"[WorkerMailer] Connection timeout: waiting for SMTP server response",
+			),
 		)
 	}
 
@@ -58,7 +61,7 @@ export class SmtpTransport {
 
 	async writeLine(line: string): Promise<void> {
 		if (/[\r\n]/.test(line)) {
-			throw new Error("[WorkerMailer] Security error: CRLF injection detected in SMTP command")
+			throw new CrlfInjectionError("SMTP command")
 		}
 		await this.write(`${line}\r\n`)
 	}
@@ -101,7 +104,7 @@ export class SmtpTransport {
 		await execTimeout(
 			this.socket.opened,
 			timeoutMs,
-			new Error("[WorkerMailer] Connection timeout: socket connection timed out"),
+			new SmtpConnectionError("[WorkerMailer] Connection timeout: socket connection timed out"),
 		)
 	}
 }

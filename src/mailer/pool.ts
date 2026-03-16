@@ -1,4 +1,5 @@
 import type { EmailOptions } from "../email/types"
+import { SmtpConnectionError } from "../errors"
 import type { SendResult } from "../result"
 import type { Mailer, WorkerMailerOptions } from "./types"
 import { WorkerMailer } from "./worker-mailer"
@@ -26,7 +27,9 @@ export class WorkerMailerPool implements Mailer {
 
 	send(options: EmailOptions): Promise<SendResult> {
 		if (this.mailers.length === 0) {
-			return Promise.reject(new Error("[WorkerMailerPool] Send failed: pool is not connected"))
+			return Promise.reject(
+				new SmtpConnectionError("[WorkerMailerPool] Send failed: pool is not connected"),
+			)
 		}
 		const mailer = this.mailers[this.nextIndex % this.mailers.length]
 		this.nextIndex++
