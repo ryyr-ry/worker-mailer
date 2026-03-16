@@ -147,7 +147,8 @@ describe("DKIM signing", () => {
 		})
 
 		it("handles PEM with BEGIN RSA PRIVATE KEY header", async () => {
-			const pkcs1Pem = "-----BEGIN RSA PRIVATE KEY-----\nSOMEDATA\n-----END RSA PRIVATE KEY-----"
+			const pkcs1Pem =
+				"-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBALRiMLAH\n-----END RSA PRIVATE KEY-----"
 			await expect(importDkimKey(pkcs1Pem)).rejects.toThrow("PKCS#1")
 		})
 	})
@@ -373,6 +374,143 @@ describe("DKIM signing", () => {
 				new TextEncoder().encode(signingInput),
 			)
 			expect(isValid).toBe(true)
+		})
+	})
+
+	describe("canonicalizeRelaxedHeader edge cases (A-M1)", () => {
+		it("should handle empty value", () => {
+			expect(canonicalizeRelaxedHeader("Subject", "")).toBe("subject:")
+		})
+
+		it("should handle tab-only value", () => {
+			expect(canonicalizeRelaxedHeader("Subject", "\t")).toBe("subject:")
+		})
+
+		it("should collapse consecutive FWS characters", () => {
+			const result = canonicalizeRelaxedHeader("Subject", "  \t  \t  hello  \t  ")
+			expect(result).toBe("subject:hello")
+		})
+
+		it("should convert tab to space", () => {
+			const result = canonicalizeRelaxedHeader("Subject", "\thello\tworld\t")
+			expect(result).toBe("subject:hello world")
+		})
+
+		it("should handle Unicode non-breaking space (kept as-is)", () => {
+			const result = canonicalizeRelaxedHeader("Subject", " hello\u00a0world ")
+			expect(result).toBe("subject:hello\u00a0world")
+		})
+	})
+
+	describe("RFC 6376 Section 3.4 canonicalization vectors (A-H1)", () => {
+		it("relaxed header: lowercases and trims", () => {
+			expect(canonicalizeRelaxedHeader("Subject", " Test  Value ")).toBe("subject:Test Value")
+		})
+
+		it("relaxed header: unfolds continuation lines", () => {
+			const result = canonicalizeRelaxedHeader("Subject", " line1\r\n\tline2")
+			expect(result).toBe("subject:line1 line2")
+		})
+
+		it("relaxed body: removes trailing empty lines", () => {
+			expect(canonicalizeRelaxedBody("text\r\n\r\n\r\n")).toBe("text\r\n")
+		})
+
+		it("relaxed body: strips trailing WSP per line", () => {
+			expect(canonicalizeRelaxedBody("hello \r\nworld\t\r\n")).toBe("hello\r\nworld\r\n")
+		})
+
+		it("relaxed body: empty body → CRLF", () => {
+			expect(canonicalizeRelaxedBody("")).toBe("\r\n")
+		})
+
+		it("simple header: preserves original exactly", () => {
+			const result = canonicalizeSimpleHeader("Subject", " Value  With  Spaces ")
+			expect(result).toBe("Subject: Value  With  Spaces ")
+		})
+
+		it("simple body: preserves whitespace on lines", () => {
+			expect(canonicalizeSimpleBody("hello \r\nworld\t\r\n")).toBe("hello \r\nworld\t\r\n")
+		})
+
+		it("simple body: removes only trailing empty lines", () => {
+			expect(canonicalizeSimpleBody("text\r\n\r\n\r\n")).toBe("text\r\n")
+		})
+
+		it("simple body: empty body → CRLF", () => {
+			expect(canonicalizeSimpleBody("")).toBe("\r\n")
+		})
+	})
+
+	describe("signDkim with PEM string (A-M2)", () => {
+		it("should accept PEM string as privateKey", async () => {
+			const rawMessage = buildTestMessage()
+			const signed = await signDkim(rawMessage, {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testPem,
+			})
+			expect(signed.startsWith("DKIM-Signature:")).toBe(true)
+			const tags = parseDkimTags(extractDkimHeader(signed))
+			expect(tags.b.replace(/\s/g, "").length).toBeGreaterThan(100)
+		})
+	})
+
+	describe("signature header 72-char folding (A-M3)", () => {
+		it("should fold b= value into 72-char chunks", async () => {
+			const signed = await signDkim(buildTestMessage(), {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testKeyPair.privateKey,
+			})
+			const dkimHeader = extractDkimHeader(signed)
+			const bLine = dkimHeader.substring(dkimHeader.lastIndexOf("\tb="))
+			const bValue = bLine.replace(/^\tb=/, "")
+			const chunks = bValue.split("\r\n\t ")
+			for (const chunk of chunks) {
+				expect(chunk.length).toBeLessThanOrEqual(72)
+			}
+		})
+	})
+
+	describe("independent RSA signature verification (A-C2)", () => {
+		it("should produce verifiable signature via crypto.subtle.verify", async () => {
+			const rawMessage = buildTestMessage()
+			const signed = await signDkim(rawMessage, {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testKeyPair.privateKey,
+				canonicalization: "relaxed/relaxed",
+			})
+			const dkimHeader = extractDkimHeader(signed)
+			const tags = parseDkimTags(dkimHeader)
+			const headerNames = tags.h.split(":")
+			const signingInput = buildVerificationInput(signed, dkimHeader, headerNames)
+			const sigBytes = fromBase64(tags.b.replace(/\s/g, ""))
+			const verified = await crypto.subtle.verify(
+				"RSASSA-PKCS1-v1_5",
+				testKeyPair.publicKey,
+				sigBytes.buffer,
+				new TextEncoder().encode(signingInput),
+			)
+			expect(verified).toBe(true)
+		})
+
+		it("should fail verification with tampered body", async () => {
+			const rawMessage = buildTestMessage()
+			const signed = await signDkim(rawMessage, {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testKeyPair.privateKey,
+			})
+			const dkimHeader = extractDkimHeader(signed)
+			const tags = parseDkimTags(dkimHeader)
+
+			const bodyStart = signed.indexOf("\r\n\r\n") + 4
+			const tamperedBody = `${signed.substring(0, bodyStart)}TAMPERED BODY`
+			const canonBody = canonicalizeRelaxedBody(tamperedBody.substring(bodyStart))
+			const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonBody))
+			expect(tags.bh).not.toBe(toBase64(digest))
 		})
 	})
 })

@@ -220,6 +220,57 @@ describe("Inline images (CID)", () => {
 		expect(raw).toContain("SGVsbG8=")
 	})
 
+	it("related and mixed boundaries are different", () => {
+		const email = makeEmail({
+			text: "plain fallback",
+			attachments: [{ filename: "doc.pdf", content: "JVBERi0xLjQK", mimeType: "application/pdf" }],
+		})
+		const raw = email.getRawMessage()
+		const boundaryMatches = [...raw.matchAll(/boundary="([^"]+)"/g)]
+		const boundaries = boundaryMatches.map((m) => m[1])
+		const unique = new Set(boundaries)
+		expect(unique.size).toBe(boundaries.length)
+	})
+
+	it("base64 lines are at most 76 characters", () => {
+		const longContent = btoa("A".repeat(200))
+		const email = makeEmail({
+			inlineAttachments: [{ cid: "logo", filename: "logo.png", content: longContent }],
+		})
+		const raw = email.getRawMessage()
+		const base64Section = raw.split("Content-Transfer-Encoding: base64\r\n\r\n")[1]
+		if (base64Section) {
+			const endIdx = base64Section.indexOf("\r\n--")
+			const base64Block = endIdx >= 0 ? base64Section.slice(0, endIdx) : base64Section
+			const lines = base64Block.split("\r\n").filter((l) => l.length > 0)
+			for (const line of lines) {
+				expect(line.length).toBeLessThanOrEqual(76)
+			}
+		}
+	})
+
+	it("file without extension defaults to application/octet-stream", () => {
+		const email = makeEmail({
+			inlineAttachments: [
+				{ cid: "data", filename: "noext", content: PNG_1PX, mimeType: undefined },
+			],
+		})
+		const raw = email.getRawMessage()
+		expect(raw).toContain("Content-Type: application/octet-stream")
+	})
+
+	it("text+html+inline produces multipart/alternative containing multipart/related", () => {
+		const email = makeEmail({ text: "plain fallback" })
+		const raw = email.getRawMessage()
+		expect(raw).toContain("multipart/alternative")
+		expect(raw).toContain("multipart/related")
+		const altIdx = raw.indexOf("multipart/alternative")
+		const relIdx = raw.indexOf("multipart/related")
+		expect(altIdx).toBeLessThan(relIdx)
+		expect(raw).toContain("text/plain")
+		expect(raw).toContain("Content-ID: <logo>")
+	})
+
 	it("html + inline + attach (no text) produces mixed > related", () => {
 		const email = makeEmail({
 			attachments: [

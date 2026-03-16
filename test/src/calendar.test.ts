@@ -198,6 +198,48 @@ describe("Calendar invites", () => {
 				expect(encoder.encode(line).length).toBeLessThanOrEqual(75)
 			}
 		})
+
+		it("reminderMinutes=0 outputs TRIGGER:-PT0M", () => {
+			const result = createCalendarEvent(baseOptions({ reminderMinutes: 0 }))
+			expect(result.content).toContain("BEGIN:VALARM")
+			expect(result.content).toContain("TRIGGER:-PT0M")
+			expect(result.content).toContain("END:VALARM")
+		})
+
+		it("reminderMinutes negative outputs negative trigger", () => {
+			const result = createCalendarEvent(baseOptions({ reminderMinutes: -5 }))
+			expect(result.content).toContain("TRIGGER:-PT-5M")
+		})
+
+		it("iCalendar structure order: VCALENDAR > VEVENT > END:VEVENT > END:VCALENDAR", () => {
+			const result = createCalendarEvent(baseOptions())
+			const content = result.content
+			const beginCal = content.indexOf("BEGIN:VCALENDAR")
+			const beginEvt = content.indexOf("BEGIN:VEVENT")
+			const endEvt = content.indexOf("END:VEVENT")
+			const endCal = content.indexOf("END:VCALENDAR")
+			expect(beginCal).toBeLessThan(beginEvt)
+			expect(beginEvt).toBeLessThan(endEvt)
+			expect(endEvt).toBeLessThan(endCal)
+		})
+
+		it("DTSTAMP is in UTC format YYYYMMDDTHHMMSSZ", () => {
+			const result = createCalendarEvent(baseOptions())
+			const match = result.content.match(/DTSTAMP:(\S+)/)
+			expect(match).not.toBeNull()
+			expect(match?.[1]).toMatch(/^\d{8}T\d{6}Z$/)
+		})
+
+		it("reflects METHOD: REPLY", () => {
+			const result = createCalendarEvent(baseOptions({ method: "REPLY" }))
+			expect(result.content).toContain("METHOD:REPLY")
+			expect(result.method).toBe("REPLY")
+		})
+
+		it("STATUS is not output when not specified", () => {
+			const result = createCalendarEvent(baseOptions())
+			expect(result.content).not.toContain("STATUS:")
+		})
 	})
 
 	describe("formatDateUtc", () => {

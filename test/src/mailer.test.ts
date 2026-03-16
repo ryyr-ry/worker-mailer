@@ -1565,6 +1565,861 @@ describe("WorkerMailer", () => {
 			await mailer.close()
 		})
 	})
+
+	describe("SMTP communication verification (B-C3)", () => {
+		it("should send MAIL FROM, RCPT TO, DATA, body in correct order", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Sender OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Recipient OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("354 Start mail input\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Message accepted\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+			})
+
+			await mailer.send({
+				from: "from@example.com",
+				to: "to@example.com",
+				subject: "Verify SMTP",
+				text: "Body content",
+			})
+
+			const calls = mockWriter.write.mock.calls.map(([arg]: [Uint8Array]) =>
+				Buffer.from(arg).toString(),
+			)
+			const ehloIdx = calls.findIndex((c: string) => c.startsWith("EHLO"))
+			const authIdx = calls.findIndex((c: string) => c.startsWith("AUTH PLAIN"))
+			const mailIdx = calls.findIndex((c: string) => c.startsWith("MAIL FROM:"))
+			const rcptIdx = calls.findIndex((c: string) => c.startsWith("RCPT TO:"))
+			const dataIdx = calls.findIndex((c: string) => c === "DATA\r\n")
+			const bodyIdx = calls.findIndex((c: string) => c.includes("\r\n.\r\n"))
+
+			expect(ehloIdx).toBeLessThan(authIdx)
+			expect(authIdx).toBeLessThan(mailIdx)
+			expect(mailIdx).toBeLessThan(rcptIdx)
+			expect(rcptIdx).toBeLessThan(dataIdx)
+			expect(dataIdx).toBeLessThan(bodyIdx)
+
+			expect(calls[mailIdx]).toContain("<from@example.com>")
+			expect(calls[rcptIdx]).toContain("<to@example.com>")
+			expect(calls[bodyIdx]).toContain("Body content")
+
+			await mailer.close()
+		})
+	})
+
+	describe("PLAIN auth Base64 verification (B-C4)", () => {
+		it("should send correctly structured AUTH PLAIN payload", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "testuser",
+				password: "testpass",
+				authType: ["plain"],
+			})
+
+			const calls = mockWriter.write.mock.calls.map(([arg]: [Uint8Array]) =>
+				Buffer.from(arg).toString(),
+			)
+			const authCall = calls.find((c: string) => c.startsWith("AUTH PLAIN"))
+			expect(authCall).toBeDefined()
+			const b64Part = authCall?.replace("AUTH PLAIN ", "").replace("\r\n", "")
+			const decoded = atob(b64Part)
+			expect(decoded).toBe("\0testuser\0testpass")
+		})
+	})
+
+	describe("LOGIN auth challenge-response (B-H5)", () => {
+		it("should complete LOGIN auth with 334 challenge-response flow", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH LOGIN\r\n250 AUTH=LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("334 VXNlcm5hbWU6\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("334 UGFzc3dvcmQ6\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "loginuser",
+				password: "loginpass",
+				authType: ["login"],
+			})
+			expect(mailer).toBeInstanceOf(WorkerMailer)
+			await mailer.close()
+		})
+	})
+
+	describe("responseTimeoutMs (B-H6)", () => {
+		it("should timeout when server does not respond", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockImplementation(() => new Promise(() => {}))
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				responseTimeoutMs: 100,
+				maxRetries: 0,
+			})
+
+			await expect(
+				mailer.send({
+					from: "a@b.com",
+					to: "c@d.com",
+					subject: "Timeout",
+					text: "body",
+				}),
+			).rejects.toThrow(SmtpConnectionError)
+		})
+	})
+
+	describe("fragmented responses (B-H7)", () => {
+		it("should handle greeting split across multiple reads", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.exa"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("mple.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+			})
+			expect(mailer).toBeInstanceOf(WorkerMailer)
+			await mailer.close()
+		})
+
+		it("should handle EHLO continuation lines split across reads", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250-smtp.example.com\r\n250-AUTH PLAIN"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(" LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+			})
+			expect(mailer).toBeInstanceOf(WorkerMailer)
+			await mailer.close()
+		})
+	})
+
+	describe("4xx/5xx response distinction (B-H8)", () => {
+		it("should retry on 451 and succeed on second attempt", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("451 Try again later\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 RSET OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Sender OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Recipient OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("354 Start mail input\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Message accepted\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				maxRetries: 1,
+			})
+
+			const result = await mailer.send({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Retry",
+				text: "body",
+			})
+			expect(result.accepted).toContain("c@d.com")
+			await mailer.close()
+		})
+
+		it("should fail immediately on 550 with maxRetries=0", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("550 User not found\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				maxRetries: 0,
+			})
+
+			await expect(
+				mailer.send({
+					from: "a@b.com",
+					to: "bad@d.com",
+					subject: "Fail",
+					text: "body",
+				}),
+			).rejects.toThrow(SmtpCommandError)
+		})
+
+		it("should exhaust retries on persistent 550", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("550 Rejected\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 RSET OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("550 Rejected\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				maxRetries: 1,
+			})
+
+			await expect(
+				mailer.send({
+					from: "a@b.com",
+					to: "bad@d.com",
+					subject: "Exhaust",
+					text: "body",
+				}),
+			).rejects.toThrow()
+		})
+	})
+
+	describe("reconnect all-fail (B-H9)", () => {
+		it("should call onFatalError when all reconnect attempts fail", async () => {
+			const onFatalError = vi.fn()
+
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				autoReconnect: true,
+				maxRetries: 1,
+				socketTimeoutMs: 200,
+				responseTimeoutMs: 200,
+				hooks: { onFatalError },
+			})
+
+			mockReader.read
+				.mockResolvedValueOnce({ value: undefined, done: true })
+				.mockResolvedValueOnce({ value: undefined, done: true })
+
+			const failSocket = {
+				readable: {
+					getReader: () => ({
+						read: vi.fn().mockResolvedValue({ value: undefined, done: true }),
+						releaseLock: vi.fn(),
+					}),
+				},
+				writable: {
+					getWriter: () => ({
+						write: vi.fn(),
+						releaseLock: vi.fn(),
+					}),
+				},
+				opened: new Promise<void>((_, reject) => {
+					setTimeout(() => reject(new Error("refused")), 0)
+				}),
+				close: vi.fn(),
+				startTls: vi.fn(),
+			}
+			failSocket.opened.catch(() => {})
+			vi.mocked(connect).mockReturnValue(failSocket as unknown as ReturnType<typeof connect>)
+
+			const sendPromise = mailer.send({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Reconnect fail",
+				text: "body",
+			})
+			await expect(sendPromise).rejects.toThrow()
+			await new Promise<void>((resolve) => setTimeout(resolve, 6000))
+			expect(onFatalError).toHaveBeenCalled()
+		}, 15_000)
+	})
+
+	describe("malformed server responses (B-H-X1)", () => {
+		it("should reject non-220 greeting", async () => {
+			mockReader.read.mockResolvedValueOnce({
+				value: new TextEncoder().encode("421 Service not available\r\n"),
+			})
+
+			await expect(
+				WorkerMailer.connect({
+					host: "smtp.example.com",
+					port: 587,
+					responseTimeoutMs: 500,
+				}),
+			).rejects.toThrow(SmtpConnectionError)
+		})
+
+		it("should reject empty greeting (connection closed)", async () => {
+			mockReader.read.mockResolvedValueOnce({ value: undefined, done: true })
+
+			await expect(
+				WorkerMailer.connect({
+					host: "smtp.example.com",
+					port: 587,
+					responseTimeoutMs: 500,
+				}),
+			).rejects.toThrow(SmtpConnectionError)
+		})
+
+		it("should handle greeting with unusual 220 message", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 localhost ESMTP\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 localhost\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				responseTimeoutMs: 500,
+			})
+			expect(mailer).toBeInstanceOf(WorkerMailer)
+			await mailer.close()
+		})
+	})
+
+	describe("concurrent sends (B-M5)", () => {
+		it("should process concurrent sends through queue", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			for (let i = 0; i < 3; i++) {
+				mockReader.read
+					.mockResolvedValueOnce({
+						value: new TextEncoder().encode("250 Sender OK\r\n"),
+					})
+					.mockResolvedValueOnce({
+						value: new TextEncoder().encode("250 Recipient OK\r\n"),
+					})
+					.mockResolvedValueOnce({
+						value: new TextEncoder().encode("354 Start mail input\r\n"),
+					})
+					.mockResolvedValueOnce({
+						value: new TextEncoder().encode("250 Message accepted\r\n"),
+					})
+			}
+			mockReader.read.mockResolvedValueOnce({
+				value: new TextEncoder().encode("221 Bye\r\n"),
+			})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+			})
+
+			const results = await Promise.all([
+				mailer.send({
+					from: "a@b.com",
+					to: "r1@d.com",
+					subject: "C1",
+					text: "body1",
+				}),
+				mailer.send({
+					from: "a@b.com",
+					to: "r2@d.com",
+					subject: "C2",
+					text: "body2",
+				}),
+				mailer.send({
+					from: "a@b.com",
+					to: "r3@d.com",
+					subject: "C3",
+					text: "body3",
+				}),
+			])
+
+			expect(results).toHaveLength(3)
+			for (const result of results) {
+				expect(result.accepted.length).toBe(1)
+			}
+			await mailer.close()
+		})
+	})
+
+	describe("hooks integration (B-M6)", () => {
+		it("should call onConnected on successful connection", async () => {
+			const onConnected = vi.fn()
+
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				hooks: { onConnected },
+			})
+
+			expect(onConnected).toHaveBeenCalledWith({
+				host: "smtp.example.com",
+				port: 587,
+			})
+			await mailer.close()
+		})
+
+		it("should call onDisconnected on close", async () => {
+			const onDisconnected = vi.fn()
+
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				hooks: { onDisconnected },
+			})
+
+			await mailer.close()
+			expect(onDisconnected).toHaveBeenCalledWith({ reason: undefined })
+		})
+
+		it("should call beforeSend and allow modification", async () => {
+			const beforeSend = vi.fn().mockImplementation((opts: unknown) => opts)
+
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Sender OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Recipient OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("354 Start mail input\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Message accepted\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				hooks: { beforeSend },
+			})
+
+			await mailer.send({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Hook",
+				text: "body",
+			})
+			expect(beforeSend).toHaveBeenCalledTimes(1)
+			await mailer.close()
+		})
+
+		it("should cancel send when beforeSend returns false", async () => {
+			const beforeSend = vi.fn().mockReturnValue(false)
+
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				hooks: { beforeSend },
+			})
+
+			await expect(
+				mailer.send({
+					from: "a@b.com",
+					to: "c@d.com",
+					subject: "Cancelled",
+					text: "body",
+				}),
+			).rejects.toThrow("cancelled")
+			await mailer.close()
+		})
+
+		it("should call afterSend on success", async () => {
+			const afterSend = vi.fn()
+
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Sender OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Recipient OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("354 Start mail input\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 Message accepted\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("221 Bye\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				hooks: { afterSend },
+			})
+
+			await mailer.send({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "AfterSend",
+				text: "body",
+			})
+			expect(afterSend).toHaveBeenCalledTimes(1)
+			expect(afterSend).toHaveBeenCalledWith(
+				expect.objectContaining({ subject: "AfterSend" }),
+				expect.objectContaining({ accepted: ["c@d.com"] }),
+			)
+			await mailer.close()
+		})
+
+		it("should call onSendError when send fails", async () => {
+			const onSendError = vi.fn()
+
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("550 Rejected\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 RSET OK\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				maxRetries: 0,
+				hooks: { onSendError },
+			})
+
+			await expect(
+				mailer.send({
+					from: "a@b.com",
+					to: "c@d.com",
+					subject: "FailHook",
+					text: "body",
+				}),
+			).rejects.toThrow()
+
+			await new Promise<void>((resolve) => setTimeout(resolve, 50))
+			expect(onSendError).toHaveBeenCalledTimes(1)
+		})
+	})
+
+	describe("retry behavior verification (B-L2)", () => {
+		it("should retry the configured number of times before failing", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("451 Temp error\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 RSET OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("451 Temp error\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 RSET OK\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("451 Temp error\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 RSET OK\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain"],
+				maxRetries: 2,
+			})
+
+			await expect(
+				mailer.send({
+					from: "a@b.com",
+					to: "c@d.com",
+					subject: "Retry exhaust",
+					text: "body",
+				}),
+			).rejects.toThrow(/max retries/)
+		})
+	})
 })
 
 describe("WorkerMailerPool", () => {
@@ -1765,6 +2620,63 @@ describe("WorkerMailerPool", () => {
 			for (const socket of mockSockets) {
 				expect(socket.close).toHaveBeenCalled()
 			}
+		})
+	})
+
+	describe("round-robin distribution (B-M7)", () => {
+		it("should distribute 4 emails across 3 sockets as 1→2→3→1", async () => {
+			const pool = new WorkerMailerPool({ ...poolOptions, poolSize: 3 })
+			await pool.connect()
+
+			const recipients = ["r1@d.com", "r2@d.com", "r3@d.com", "r4@d.com"]
+
+			for (const socket of mockSockets) {
+				const reader = socket.readable.getReader()
+				for (let i = 0; i < 2; i++) {
+					reader.read
+						.mockResolvedValueOnce({
+							value: new TextEncoder().encode("250 OK\r\n"),
+						})
+						.mockResolvedValueOnce({
+							value: new TextEncoder().encode("250 OK\r\n"),
+						})
+						.mockResolvedValueOnce({
+							value: new TextEncoder().encode("354 Start mail input\r\n"),
+						})
+						.mockResolvedValueOnce({
+							value: new TextEncoder().encode("250 OK\r\n"),
+						})
+				}
+			}
+
+			for (const rcpt of recipients) {
+				await pool.send({
+					from: "sender@example.com",
+					to: rcpt,
+					subject: "RR Test",
+					text: "body",
+				})
+			}
+
+			const rcptsBySocket: string[][] = []
+			for (const socket of mockSockets) {
+				const writer = socket.writable.getWriter()
+				const rcpts = writer.write.mock.calls
+					.map(([arg]: [Uint8Array]) => Buffer.from(arg).toString())
+					.filter((c: string) => c.startsWith("RCPT TO:"))
+					.map((c: string) => {
+						const match = c.match(/<([^>]+)>/)
+						return match ? match[1] : ""
+					})
+				rcptsBySocket.push(rcpts)
+			}
+
+			expect(rcptsBySocket[0]).toContain("r1@d.com")
+			expect(rcptsBySocket[1]).toContain("r2@d.com")
+			expect(rcptsBySocket[2]).toContain("r3@d.com")
+			expect(rcptsBySocket[0]).toContain("r4@d.com")
+
+			await pool.close()
 		})
 	})
 })

@@ -2,6 +2,7 @@ import * as libqp from "libqp"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { QueueClosedError } from "../../src/errors"
 import {
+	arrayBufferToBase64,
 	BlockingQueue,
 	backoff,
 	decode,
@@ -93,6 +94,16 @@ describe("BlockingQueue", () => {
 		queue.close()
 		await expect(queue.dequeue()).rejects.toThrow(QueueClosedError)
 	})
+
+	it("should throw QueueClosedError with correct message on enqueue after close", () => {
+		queue.close()
+		expect(() => queue.enqueue(1)).toThrow("Queue is closed")
+	})
+
+	it("should reject with QueueClosedError with correct message on dequeue after close", async () => {
+		queue.close()
+		await expect(queue.dequeue()).rejects.toThrow("Queue is closed")
+	})
 })
 
 describe("backoff", () => {
@@ -162,6 +173,18 @@ describe("execTimeout", () => {
 
 		await expect(execTimeout(slowPromise, 50, new Error("timeout"))).rejects.toThrow("timeout")
 	})
+
+	it("should resolve when promise completes just before timeout", async () => {
+		vi.useFakeTimers()
+		const promise = new Promise<string>((resolve) => {
+			setTimeout(() => resolve("just-in-time"), 99)
+		})
+		const racePromise = execTimeout(promise, 100, new Error("timeout"))
+		vi.advanceTimersByTime(99)
+		const result = await racePromise
+		expect(result).toBe("just-in-time")
+		vi.useRealTimers()
+	})
 })
 
 describe("encode/decode", () => {
@@ -187,6 +210,20 @@ describe("encode/decode", () => {
 		const decoded = decode(encoded)
 
 		expect(decoded).toBe(original)
+	})
+
+	it("should encode ASCII 'A' as byte 0x41", () => {
+		const encoded = encode("A")
+		expect(encoded[0]).toBe(0x41)
+		expect(encoded.length).toBe(1)
+	})
+
+	it("should encode multibyte UTF-8 correctly", () => {
+		const encoded = encode("€")
+		expect(encoded[0]).toBe(0xe2)
+		expect(encoded[1]).toBe(0x82)
+		expect(encoded[2]).toBe(0xac)
+		expect(encoded.length).toBe(3)
 	})
 })
 
@@ -222,6 +259,61 @@ describe("toBase64", () => {
 
 	it("should handle empty string", () => {
 		expect(toBase64("")).toBe("")
+	})
+})
+
+describe("arrayBufferToBase64", () => {
+	it("should encode empty ArrayBuffer", () => {
+		const buffer = new ArrayBuffer(0)
+		expect(arrayBufferToBase64(buffer)).toBe("")
+	})
+
+	it("should encode single byte", () => {
+		const buffer = new Uint8Array([0x41]).buffer
+		expect(arrayBufferToBase64(buffer)).toBe(btoa("A"))
+	})
+
+	it("should encode multibyte UTF-8 content", () => {
+		const bytes = new TextEncoder().encode("Hello")
+		const result = arrayBufferToBase64(bytes.buffer)
+		expect(result).toBe(btoa("Hello"))
+	})
+
+	it("should encode large buffer (1024 bytes)", () => {
+		const bytes = new Uint8Array(1024)
+		for (let i = 0; i < 1024; i++) {
+			bytes[i] = i % 256
+		}
+		const result = arrayBufferToBase64(bytes.buffer)
+		expect(typeof result).toBe("string")
+		expect(result.length).toBeGreaterThan(0)
+		const decoded = atob(result)
+		expect(decoded.length).toBe(1024)
+	})
+
+	it("should encode pattern 0x00 0xFF correctly", () => {
+		const bytes = new Uint8Array([0x00, 0xff])
+		const result = arrayBufferToBase64(bytes.buffer)
+		const decoded = atob(result)
+		expect(decoded.charCodeAt(0)).toBe(0x00)
+		expect(decoded.charCodeAt(1)).toBe(0xff)
+	})
+})
+
+describe("BlockingQueue FIFO interleave", () => {
+	it("should preserve FIFO order with interleaved enqueue/dequeue", async () => {
+		const queue = new BlockingQueue<number>()
+
+		queue.enqueue(1)
+		queue.enqueue(2)
+		const v1 = await queue.dequeue()
+		queue.enqueue(3)
+		const v2 = await queue.dequeue()
+		const v3 = await queue.dequeue()
+
+		expect(v1).toBe(1)
+		expect(v2).toBe(2)
+		expect(v3).toBe(3)
 	})
 })
 

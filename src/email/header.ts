@@ -1,6 +1,17 @@
 import { encode } from "../utils"
 import type { User } from "./types"
 
+const PROTECTED_HEADERS = new Set([
+	"from",
+	"to",
+	"cc",
+	"bcc",
+	"subject",
+	"date",
+	"message-id",
+	"mime-version",
+])
+
 function isAsciiOnly(text: string): boolean {
 	for (let i = 0; i < text.length; i++) {
 		const code = text.charCodeAt(i)
@@ -91,6 +102,12 @@ export function resolveHeaders(params: {
 	headers: Record<string, string>
 }): void {
 	const { from, to, cc, reply, subject, headers } = params
+
+	for (const key of Object.keys(headers)) {
+		if (PROTECTED_HEADERS.has(key.toLowerCase())) {
+			delete headers[key]
+		}
+	}
 
 	if (!headers.From) {
 		let fromValue = from.email

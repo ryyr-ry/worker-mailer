@@ -1,5 +1,5 @@
 import type { DsnOptions } from "../email/types"
-import { SmtpCommandError } from "../errors"
+import { CrlfInjectionError, SmtpCommandError } from "../errors"
 import type { SmtpTransport } from "./transport"
 import type { SmtpCapabilities } from "./types"
 
@@ -16,6 +16,9 @@ export async function mailFrom(
 	if (capabilities.supportsDSN) {
 		message += ` ${buildRet(dsnGlobal, dsnOverride)}`
 		if (dsnOverride?.envelopeId) {
+			if (/[\r\n]/.test(dsnOverride.envelopeId)) {
+				throw new CrlfInjectionError("DSN envelope ID")
+			}
 			message += ` ENVID=${dsnOverride.envelopeId}`
 		}
 	}

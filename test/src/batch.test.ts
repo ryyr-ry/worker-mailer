@@ -346,4 +346,111 @@ describe("sendBatch", () => {
 
 		await mailer.close()
 	})
+
+	it("concurrency+continueOnError:false aborts before starting remaining emails", async () => {
+		const sendLog: string[] = []
+		const mock = new MockMailer({ simulateDelay: 10 })
+
+		const originalSend = mock.send.bind(mock)
+		mock.send = async (options: EmailOptions) => {
+			sendLog.push(`start:${options.subject}`)
+			if (options.subject === "Email 2") {
+				throw new Error("deliberate failure")
+			}
+			const result = await originalSend(options)
+			sendLog.push(`end:${options.subject}`)
+			return result
+		}
+
+		const emails = [makeEmail("Email 1"), makeEmail("Email 2"), makeEmail("Email 3")]
+		const results = await sendBatch(mock, emails, {
+			concurrency: 1,
+			continueOnError: false,
+		})
+
+		expect(results).toHaveLength(2)
+		expect(results[0].success).toBe(true)
+		expect(results[1].success).toBe(false)
+		expect(sendLog).not.toContain("start:Email 3")
+	})
+
+	it("single email batch succeeds", async () => {
+		const mock = new MockMailer()
+		const emails = [makeEmail("Solo")]
+		const results = await sendBatch(mock, emails)
+
+		expect(results).toHaveLength(1)
+		expect(results[0].success).toBe(true)
+		expect(results[0].result?.response).toContain("250")
+	})
+
+	it("single email batch failure", async () => {
+		const mock = new MockMailer({ simulateError: new Error("fail") })
+		const emails = [makeEmail("Solo Fail")]
+		const results = await sendBatch(mock, emails)
+
+		expect(results).toHaveLength(1)
+		expect(results[0].success).toBe(false)
+		expect(results[0].error?.message).toBe("fail")
+	})
+
+	it("continueOnError defaults to true when option is omitted", async () => {
+		const mock = new MockMailer({ simulateDelay: 5 })
+		const originalSend = mock.send.bind(mock)
+		let callCount = 0
+		mock.send = async (options: EmailOptions) => {
+			callCount++
+			if (callCount === 2) {
+				throw new Error("second email fails")
+			}
+			return originalSend(options)
+		}
+
+		const emails = [makeEmail("Email 1"), makeEmail("Email 2"), makeEmail("Email 3")]
+		const results = await sendBatch(mock, emails)
+
+		expect(results).toHaveLength(3)
+		expect(results[0].success).toBe(true)
+		expect(results[1].success).toBe(false)
+		expect(results[2].success).toBe(true)
+	})
+
+	it("large batch of 50 emails with MockMailer preserves order", async () => {
+		const mock = new MockMailer({ simulateDelay: 2 })
+
+		const emails = Array.from({ length: 50 }, (_, i) => ({
+			from: "a@b.com",
+			to: `user${i}@b.com`,
+			subject: `Email ${i}`,
+			text: "test",
+		}))
+
+		const results = await sendBatch(mock, emails, { concurrency: 5 })
+
+		expect(results).toHaveLength(50)
+		expect(results.every((r) => r.success)).toBe(true)
+		for (let i = 0; i < results.length; i++) {
+			expect(results[i].email.subject).toBe(`Email ${i}`)
+		}
+	})
+
+	it("all emails report success for batch with concurrency and no errors", async () => {
+		const mock = new MockMailer({ simulateDelay: 5 })
+
+		const emails = Array.from({ length: 8 }, (_, i) => ({
+			from: "a@b.com",
+			to: `user${i}@b.com`,
+			subject: `Msg ${i}`,
+			text: "test",
+		}))
+
+		const results = await sendBatch(mock, emails, { concurrency: 4 })
+
+		expect(results).toHaveLength(8)
+		for (const r of results) {
+			expect(r.success).toBe(true)
+			expect(r.result).toBeDefined()
+			expect(r.error).toBeUndefined()
+		}
+	})
 })

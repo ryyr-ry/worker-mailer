@@ -1,5 +1,6 @@
 import { connect } from "cloudflare:sockets"
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
+import { WorkerMailerError } from "../../src/errors"
 import { SendCancelledError, WorkerMailer } from "../../src/mailer"
 
 vi.mock("cloudflare:sockets", () => ({
@@ -127,6 +128,27 @@ describe("SendHooks", () => {
 			await mailer.close()
 		})
 
+		it("modified subject is sent over SMTP wire data", async () => {
+			const modified = { ...baseEmail, subject: "Modified Subject" }
+			const beforeSend = vi.fn().mockReturnValue(modified)
+			setupConnection()
+			setupSuccessfulSend()
+			mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				hooks: { beforeSend },
+			})
+			await mailer.send(baseEmail)
+
+			const writeCalls = mockWriter.write.mock.calls
+			const wireData = writeCalls
+				.map((call: [Uint8Array]) => new TextDecoder().decode(call[0]))
+				.join("")
+			expect(wireData).toContain("Subject: Modified Subject")
+			await mailer.close()
+		})
+
 		it("void proceeds with original options", async () => {
 			const beforeSend = vi.fn().mockReturnValue(undefined)
 			setupConnection()
@@ -175,6 +197,32 @@ describe("SendHooks", () => {
 			})
 			await mailer.send(baseEmail)
 			expect(resolved).toBe(true)
+			await mailer.close()
+		})
+
+		it("returning object missing 'from' still gets used as emailOptions", async () => {
+			const beforeSend = vi.fn().mockReturnValue({ subject: "No From" })
+			setupConnection()
+			mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				hooks: { beforeSend },
+			})
+			await expect(mailer.send(baseEmail)).rejects.toThrow()
+			await mailer.close()
+		})
+
+		it("returning empty object causes validation error", async () => {
+			const beforeSend = vi.fn().mockReturnValue({})
+			setupConnection()
+			mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				hooks: { beforeSend },
+			})
+			await expect(mailer.send(baseEmail)).rejects.toThrow()
 			await mailer.close()
 		})
 	})
@@ -253,6 +301,26 @@ describe("SendHooks", () => {
 			)
 			await mailer.close()
 		})
+
+		it("throw inside onSendError does not replace original rejection", async () => {
+			const onSendError = vi.fn().mockRejectedValue(new Error("hook crash"))
+			setupConnection()
+			mockReader.read
+				.mockResolvedValueOnce({ value: encode("451 Temporary failure\r\n") })
+				.mockResolvedValueOnce({ value: encode("250 RSET OK\r\n") })
+				.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				maxRetries: 0,
+				hooks: { onSendError },
+			})
+
+			await expect(mailer.send(baseEmail)).rejects.toThrow(/max retries/)
+			await new Promise<void>((r) => setTimeout(r, 50))
+			expect(onSendError).toHaveBeenCalled()
+			await mailer.close()
+		})
 	})
 
 	describe("lifecycle hooks", () => {
@@ -272,6 +340,36 @@ describe("SendHooks", () => {
 			await mailer.close()
 		})
 
+		it("onConnected receives host and port only", async () => {
+			const onConnected = vi.fn()
+			setupConnection()
+			mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				hooks: { onConnected },
+			})
+			const arg = onConnected.mock.calls[0][0] as { host: string; port: number }
+			expect(arg).toHaveProperty("host")
+			expect(arg).toHaveProperty("port")
+			expect(typeof arg.host).toBe("string")
+			expect(typeof arg.port).toBe("number")
+			await mailer.close()
+		})
+
+		it("onConnected called exactly once", async () => {
+			const onConnected = vi.fn()
+			setupConnection()
+			mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				hooks: { onConnected },
+			})
+			expect(onConnected).toHaveBeenCalledTimes(1)
+			await mailer.close()
+		})
+
 		it("onDisconnected called on close()", async () => {
 			const onDisconnected = vi.fn()
 			setupConnection()
@@ -283,6 +381,44 @@ describe("SendHooks", () => {
 			})
 			await mailer.close()
 			expect(onDisconnected).toHaveBeenCalledWith({ reason: undefined })
+		})
+
+		it("onDisconnected called exactly once on close()", async () => {
+			const onDisconnected = vi.fn()
+			setupConnection()
+			mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				hooks: { onDisconnected },
+			})
+			await mailer.close()
+			expect(onDisconnected).toHaveBeenCalledTimes(1)
+		})
+
+		it("onDisconnected receives reason on error close", async () => {
+			const onDisconnected = vi.fn()
+			const onFatalError = vi.fn()
+			setupConnection()
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				maxRetries: 0,
+				hooks: { onDisconnected, onFatalError },
+			})
+
+			mockReader.read
+				.mockResolvedValueOnce({ value: encode("451 Temporary failure\r\n") })
+				.mockResolvedValueOnce({ value: encode("500 RSET failed\r\n") })
+
+			const sendPromise = mailer.send(baseEmail)
+			await expect(sendPromise).rejects.toThrow()
+			await new Promise<void>((r) => setTimeout(r, 50))
+			expect(onDisconnected).toHaveBeenCalledWith(
+				expect.objectContaining({
+					reason: expect.stringContaining("RSET failed"),
+				}),
+			)
 		})
 
 		it("onFatalError called on fatal error", async () => {
@@ -307,6 +443,102 @@ describe("SendHooks", () => {
 					message: expect.stringContaining("RSET failed"),
 				}),
 			)
+		})
+
+		it("onFatalError receives an Error instance", async () => {
+			const onFatalError = vi.fn()
+			setupConnection()
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				maxRetries: 0,
+				hooks: { onFatalError },
+			})
+
+			mockReader.read
+				.mockResolvedValueOnce({ value: encode("451 Temporary failure\r\n") })
+				.mockResolvedValueOnce({ value: encode("500 RSET failed\r\n") })
+
+			const sendPromise = mailer.send(baseEmail)
+			await expect(sendPromise).rejects.toThrow()
+			await new Promise<void>((r) => setTimeout(r, 50))
+			expect(onFatalError.mock.calls[0][0]).toBeInstanceOf(Error)
+		})
+	})
+
+	describe("combined hooks", () => {
+		it("success: beforeSend+afterSend called, onSendError not called", async () => {
+			const beforeSend = vi.fn()
+			const afterSend = vi.fn()
+			const onSendError = vi.fn()
+			setupConnection()
+			setupSuccessfulSend()
+			mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				hooks: { beforeSend, afterSend, onSendError },
+			})
+			await mailer.send(baseEmail)
+			await new Promise<void>((r) => setTimeout(r, 50))
+
+			expect(beforeSend).toHaveBeenCalledOnce()
+			expect(afterSend).toHaveBeenCalledOnce()
+			expect(onSendError).not.toHaveBeenCalled()
+			await mailer.close()
+		})
+
+		it("failure: beforeSend+onSendError called, afterSend not called", async () => {
+			const beforeSend = vi.fn()
+			const afterSend = vi.fn()
+			const onSendError = vi.fn()
+			setupConnection()
+			mockReader.read
+				.mockResolvedValueOnce({ value: encode("451 Temporary failure\r\n") })
+				.mockResolvedValueOnce({ value: encode("250 RSET OK\r\n") })
+				.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				maxRetries: 0,
+				hooks: { beforeSend, afterSend, onSendError },
+			})
+			await expect(mailer.send(baseEmail)).rejects.toThrow()
+			await new Promise<void>((r) => setTimeout(r, 50))
+
+			expect(beforeSend).toHaveBeenCalledOnce()
+			expect(afterSend).not.toHaveBeenCalled()
+			expect(onSendError).toHaveBeenCalledOnce()
+			await mailer.close()
+		})
+	})
+
+	describe("async hook timeline", () => {
+		it("async beforeSend completes before afterSend fires", async () => {
+			const timeline: string[] = []
+			const beforeSend = vi.fn().mockImplementation(async () => {
+				timeline.push("hook-start")
+				await new Promise<void>((r) => setTimeout(r, 30))
+				timeline.push("hook-end")
+			})
+			const afterSend = vi.fn().mockImplementation(() => {
+				timeline.push("afterSend")
+			})
+			setupConnection()
+			setupSuccessfulSend()
+			mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+			const mailer = await WorkerMailer.connect({
+				...baseOptions,
+				hooks: { beforeSend, afterSend },
+			})
+			await mailer.send(baseEmail)
+			await new Promise<void>((r) => setTimeout(r, 50))
+
+			const hookEndIdx = timeline.indexOf("hook-end")
+			const afterSendIdx = timeline.indexOf("afterSend")
+			expect(hookEndIdx).toBeLessThan(afterSendIdx)
+			await mailer.close()
 		})
 	})
 
@@ -349,6 +581,78 @@ describe("SendHooks", () => {
 		expect(error.name).toBe("SendCancelledError")
 		expect(error.message).toBe("Send cancelled by beforeSend hook")
 		expect(error).toBeInstanceOf(Error)
+	})
+
+	it("SendCancelledError extends WorkerMailerError", () => {
+		const error = new SendCancelledError()
+		expect(error).toBeInstanceOf(WorkerMailerError)
+	})
+
+	it("beforeSend called for each email in sequence", async () => {
+		const calls: string[] = []
+		const beforeSend = vi.fn().mockImplementation((email: { subject: string }) => {
+			calls.push(email.subject)
+		})
+		setupConnection()
+		setupSuccessfulSend()
+		setupSuccessfulSend()
+		mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+		const mailer = await WorkerMailer.connect({
+			...baseOptions,
+			hooks: { beforeSend },
+		})
+		await mailer.send({ ...baseEmail, subject: "First" })
+		await mailer.send({ ...baseEmail, subject: "Second" })
+		expect(calls).toEqual(["First", "Second"])
+		await mailer.close()
+	})
+
+	it("afterSend receives fresh result for each send", async () => {
+		const results: string[] = []
+		const afterSend = vi
+			.fn()
+			.mockImplementation((_email: unknown, result: { messageId: string }) => {
+				results.push(result.messageId)
+			})
+		setupConnection()
+		setupSuccessfulSend()
+		setupSuccessfulSend()
+		mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+		const mailer = await WorkerMailer.connect({
+			...baseOptions,
+			hooks: { afterSend },
+		})
+		await mailer.send(baseEmail)
+		await mailer.send(baseEmail)
+		await new Promise<void>((r) => setTimeout(r, 50))
+		expect(results).toHaveLength(2)
+		expect(results[0]).not.toBe(results[1])
+		await mailer.close()
+	})
+
+	it("onSendError receives original email options", async () => {
+		const onSendError = vi.fn()
+		setupConnection()
+		mockReader.read
+			.mockResolvedValueOnce({ value: encode("451 Temporary failure\r\n") })
+			.mockResolvedValueOnce({ value: encode("250 RSET OK\r\n") })
+			.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+		const mailer = await WorkerMailer.connect({
+			...baseOptions,
+			maxRetries: 0,
+			hooks: { onSendError },
+		})
+		const email = { ...baseEmail, subject: "Track This" }
+		await expect(mailer.send(email)).rejects.toThrow()
+		await new Promise<void>((r) => setTimeout(r, 50))
+		expect(onSendError).toHaveBeenCalledWith(
+			expect.objectContaining({ subject: "Track This" }),
+			expect.any(Error),
+		)
+		await mailer.close()
 	})
 
 	it("falls back to console.error when onFatalError not set", async () => {

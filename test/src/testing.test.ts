@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { Email } from "../../src/email/email"
 import { createTestEmail } from "../../src/testing"
 
 describe("createTestEmail", () => {
@@ -70,6 +71,34 @@ describe("createTestEmail", () => {
 		expect(result.subject).toMatch(isoPattern)
 		expect(result.text).toMatch(isoPattern)
 		expect(result.html).toMatch(isoPattern)
+	})
+
+	it("returns EmailOptions with string fields", () => {
+		const result = createTestEmail({
+			from: "sender@example.com",
+			to: "recipient@example.com",
+		})
+		expect(typeof result.from).toBe("string")
+		expect(typeof result.subject).toBe("string")
+		expect(typeof result.text).toBe("string")
+		expect(typeof result.html).toBe("string")
+	})
+
+	it("empty from produces invalid Email on construction", () => {
+		const opts = createTestEmail({
+			from: "",
+			to: "recipient@example.com",
+		})
+		expect(() => new Email(opts)).toThrow()
+	})
+
+	it("empty to results in Email with empty recipient list", () => {
+		const opts = createTestEmail({
+			from: "sender@example.com",
+			to: "",
+		})
+		const email = new Email(opts)
+		expect(email.to).toEqual([])
 	})
 
 	it("should have valid HTML structure in generated output", () => {

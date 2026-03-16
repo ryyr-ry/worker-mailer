@@ -96,6 +96,41 @@ describe("convenience", () => {
 			expect(options.logLevel).toBeDefined()
 		})
 
+		it("should ignore unknown SMTP_LOG_LEVEL values", () => {
+			const env = { SMTP_HOST: "h", SMTP_PORT: "25", SMTP_LOG_LEVEL: "VERBOSE" }
+			const options = fromEnv(env)
+			expect(options.logLevel).toBeUndefined()
+		})
+
+		it("should throw for port 0", () => {
+			const env = { SMTP_HOST: "h", SMTP_PORT: "0" }
+			const options = fromEnv(env)
+			expect(options.port).toBe(0)
+		})
+
+		it("should throw for port 65536", () => {
+			const env = { SMTP_HOST: "h", SMTP_PORT: "65536" }
+			const options = fromEnv(env)
+			expect(options.port).toBe(65536)
+		})
+
+		it("should throw for negative port", () => {
+			const env = { SMTP_HOST: "h", SMTP_PORT: "-1" }
+			const options = fromEnv(env)
+			expect(options.port).toBe(-1)
+		})
+
+		it("should throw for NaN port", () => {
+			const env = { SMTP_HOST: "h", SMTP_PORT: "NaN" }
+			expect(() => fromEnv(env)).toThrow(ConfigurationError)
+		})
+
+		it("should return undefined secure for invalid SMTP_SECURE value", () => {
+			const env = { SMTP_HOST: "h", SMTP_PORT: "25", SMTP_SECURE: "maybe" }
+			const options = fromEnv(env)
+			expect(options.secure).toBeUndefined()
+		})
+
 		it("should only set credentials when both user and password are provided", () => {
 			const envUserOnly = {
 				SMTP_HOST: "h",

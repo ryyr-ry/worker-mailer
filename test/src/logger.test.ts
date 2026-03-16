@@ -129,4 +129,50 @@ describe("Logger", () => {
 			expect(loggedMessage).toMatch(/^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]/)
 		})
 	})
+
+	describe("credential sanitization", () => {
+		it("sanitizes AUTH PLAIN base64 credentials in debug messages", () => {
+			const logger = new Logger(LogLevel.DEBUG, "[SMTP]")
+			logger.debug("AUTH PLAIN dXNlcjpwYXNz")
+			const msg = consoleSpy.debug.mock.calls[0][0] as string
+			expect(msg).toContain("AUTH PLAIN [REDACTED]")
+			expect(msg).not.toContain("dXNlcjpwYXNz")
+		})
+
+		it("sanitizes AUTH LOGIN base64 credentials in debug messages", () => {
+			const logger = new Logger(LogLevel.DEBUG, "[SMTP]")
+			logger.debug("AUTH LOGIN dXNlcm5hbWU=")
+			const msg = consoleSpy.debug.mock.calls[0][0] as string
+			expect(msg).toContain("AUTH LOGIN [REDACTED]")
+			expect(msg).not.toContain("dXNlcm5hbWU=")
+		})
+
+		it("sanitizes long base64 strings in debug messages", () => {
+			const logger = new Logger(LogLevel.DEBUG, "[SMTP]")
+			const longBase64 = "A".repeat(100)
+			logger.debug(`data: ${longBase64}`)
+			const msg = consoleSpy.debug.mock.calls[0][0] as string
+			expect(msg).toContain("[REDACTED]")
+			expect(msg).not.toContain(longBase64)
+		})
+	})
+
+	describe("constructor defaults", () => {
+		it("default level is INFO when undefined is passed", () => {
+			const logger = new Logger(undefined, "[Default]")
+			logger.debug("should not appear")
+			logger.info("should appear")
+			expect(consoleSpy.debug).not.toHaveBeenCalled()
+			expect(consoleSpy.info).toHaveBeenCalled()
+		})
+	})
+
+	describe("Error object as argument", () => {
+		it("passes Error object through as additional argument", () => {
+			const logger = new Logger(LogLevel.ERROR, "[Test]")
+			const err = new Error("test error")
+			logger.error("failed:", err)
+			expect(consoleSpy.error).toHaveBeenCalledWith(expect.stringContaining("[Test] failed:"), err)
+		})
+	})
 })

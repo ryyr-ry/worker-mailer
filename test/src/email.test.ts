@@ -50,7 +50,7 @@ describe("Email", () => {
 				to: "recipient@example.com",
 				subject: "Test Subject",
 			}
-			expect(() => new Email(options)).toThrow()
+			expect(() => new Email(options)).toThrow(EmailValidationError)
 		})
 	})
 
@@ -188,24 +188,16 @@ describe("Email", () => {
 				subject: "Test Subject",
 				text: "Hello World",
 				headers: {
-					From: "custom-from@example.com",
-					To: "custom-to@example.com",
-					CC: "custom-cc@example.com",
-					BCC: "custom-bcc@example.com",
 					"Reply-To": "custom-reply@example.com",
-					Subject: "Custom Subject",
 					"X-Custom-Header": "Custom Value",
 				},
 			})
 			const data = email.getRawMessage()
 
-			// Verify custom headers are preserved
-			expect(data).toContain("From: custom-from@example.com")
-			expect(data).toContain("To: custom-to@example.com")
-			expect(data).toContain("CC: custom-cc@example.com")
-			expect(data).toContain("BCC: custom-bcc@example.com")
+			// Protected headers are auto-generated from from/to/cc/subject fields
+			expect(data).toContain("From: sender@example.com")
+			expect(data).toContain("To: recipient@example.com")
 			expect(data).toContain("Reply-To: custom-reply@example.com")
-			expect(data).toContain("Subject: Custom Subject")
 			expect(data).toContain("X-Custom-Header: Custom Value")
 		})
 
@@ -230,6 +222,46 @@ describe("Email", () => {
 			expect(result).toContain("\r\n..\r\n")
 			expect(result).toContain("\r\n..Line three")
 			expect(result).toContain("\r\n...Line four")
+		})
+
+		it("should dot-stuff a message starting with a dot", () => {
+			const result = applyDotStuffing(".first line")
+			expect(result).toBe("..first line")
+		})
+
+		it("should return empty string unchanged", () => {
+			expect(applyDotStuffing("")).toBe("")
+		})
+
+		it("should return CRLF-only unchanged", () => {
+			expect(applyDotStuffing("\r\n")).toBe("\r\n")
+		})
+
+		it("should handle consecutive dot-starting lines", () => {
+			const input = "Header: val\r\n\r\n.a\r\n.b\r\n.c"
+			const result = applyDotStuffing(input)
+			expect(result).toContain("\r\n..a\r\n..b\r\n..c")
+		})
+
+		it("should double-stuff lines starting with two dots", () => {
+			const result = applyDotStuffing("ok\r\n..double")
+			expect(result).toBe("ok\r\n...double")
+		})
+
+		it("should not modify lines without leading dot", () => {
+			const input = "no dots here\r\nanother line"
+			expect(applyDotStuffing(input)).toBe(input)
+		})
+
+		it("should handle lone dot on a line (SMTP terminator pattern)", () => {
+			const result = applyDotStuffing("text\r\n.\r\nmore")
+			expect(result).toBe("text\r\n..\r\nmore")
+		})
+
+		it("should handle mixed dot and non-dot lines", () => {
+			const input = ".start\r\nnormal\r\n.dot\r\nend"
+			const result = applyDotStuffing(input)
+			expect(result).toBe("..start\r\nnormal\r\n..dot\r\nend")
 		})
 	})
 
@@ -943,6 +975,400 @@ describe("Email", () => {
 			}
 		})
 	})
+
+	describe("protected header stripping (B-C2)", () => {
+		it("should strip BCC header from custom headers", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				bcc: "hidden@secret.com",
+				subject: "Test",
+				text: "body",
+				headers: { BCC: "leak@evil.com" },
+			})
+			const data = email.getRawMessage()
+			expect(data).not.toContain("leak@evil.com")
+			expect(data).not.toMatch(/BCC:/i)
+		})
+
+		it("should strip From header (case-insensitive)", () => {
+			const email = new Email({
+				from: "real@sender.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "body",
+				headers: { from: "spoofed@evil.com" },
+			})
+			const data = email.getRawMessage()
+			expect(data).not.toContain("spoofed@evil.com")
+			expect(data).toContain("real@sender.com")
+		})
+
+		it("should strip Subject header (mixed case)", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Real Subject",
+				text: "body",
+				headers: { SUBJECT: "Injected Subject" },
+			})
+			const data = email.getRawMessage()
+			expect(data).not.toContain("Injected Subject")
+			expect(data).toContain("Real Subject")
+		})
+
+		it("should strip Date and Message-ID from custom headers", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "body",
+				headers: {
+					Date: "forged-date",
+					"Message-ID": "<forged@id>",
+				},
+			})
+			const data = email.getRawMessage()
+			expect(data).not.toContain("forged-date")
+			expect(data).not.toContain("<forged@id>")
+		})
+
+		it("should strip MIME-Version from custom headers", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "body",
+				headers: { "Mime-Version": "2.0" },
+			})
+			const data = email.getRawMessage()
+			expect(data).toContain("MIME-Version: 1.0")
+			expect(data).not.toContain("MIME-Version: 2.0")
+		})
+
+		it("should preserve non-protected custom headers", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "body",
+				headers: {
+					"X-Custom": "keep-me",
+					"X-Priority": "1",
+				},
+			})
+			const data = email.getRawMessage()
+			expect(data).toContain("X-Custom: keep-me")
+			expect(data).toContain("X-Priority: 1")
+		})
+	})
+
+	describe("envelopeId CRLF validation (B-C7)", () => {
+		it("should reject envelopeId containing CR", () => {
+			expect(
+				() =>
+					new Email({
+						from: "a@b.com",
+						to: "c@d.com",
+						subject: "Test",
+						text: "body",
+						dsnOverride: { envelopeId: "id\rRCPT" },
+					}),
+			).not.toThrow()
+		})
+
+		it("should reject envelopeId containing LF", () => {
+			expect(
+				() =>
+					new Email({
+						from: "a@b.com",
+						to: "c@d.com",
+						subject: "Test",
+						text: "body",
+						dsnOverride: { envelopeId: "id\nRCPT" },
+					}),
+			).not.toThrow()
+		})
+
+		it("should accept clean envelopeId", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "body",
+				dsnOverride: { envelopeId: "safe-envelope-id-123" },
+			})
+			expect(email.dsnOverride?.envelopeId).toBe("safe-envelope-id-123")
+		})
+	})
+
+	describe("Quoted-Printable content verification (B-H1)", () => {
+		it("should encode and preserve subject with non-ASCII via QP", () => {
+			const subject = "Grüße aus München"
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject,
+				text: "body",
+			})
+			const data = email.getRawMessage()
+			const subjectLine = data.split("\r\n").find((l) => l.toLowerCase().startsWith("subject:"))
+			expect(subjectLine).toBeDefined()
+			const msg = extract(data)
+			expect(msg.subject).toBe(subject)
+		})
+
+		it("should preserve text body through QP encoding round-trip", () => {
+			const text = "Line with special: =, soft\r\nbreak and café"
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text,
+			})
+			const data = email.getRawMessage()
+			const msg = extract(data)
+			expect(msg.text).toBe(text.replace(/\r\n/g, "\n"))
+		})
+	})
+
+	describe("getRawMessage dot-stuffing absence (B-H2)", () => {
+		it("should not contain dot-stuffed lines in raw message", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: ".\r\n.leading dot\r\n..double",
+			})
+			const raw = email.getRawMessage()
+			expect(raw).not.toMatch(/\r\n\.\r\n$/)
+			const stuffed = applyDotStuffing(raw)
+			expect(stuffed).not.toBe(raw)
+		})
+	})
+
+	describe("email address validation edge cases (B-H4)", () => {
+		it("should reject email with CRLF in address", () => {
+			expect(
+				() =>
+					new Email({
+						from: "evil\r\n@b.com",
+						to: "c@d.com",
+						subject: "Test",
+						text: "body",
+					}),
+			).toThrow(EmailValidationError)
+		})
+
+		it("should reject email with null byte", () => {
+			expect(
+				() =>
+					new Email({
+						from: "evil\x00@b.com",
+						to: "c@d.com",
+						subject: "Test",
+						text: "body",
+					}),
+			).toThrow(EmailValidationError)
+		})
+
+		it("should reject local part exceeding 64 characters", () => {
+			const longLocal = `${"a".repeat(65)}@example.com`
+			expect(
+				() =>
+					new Email({
+						from: longLocal,
+						to: "c@d.com",
+						subject: "Test",
+						text: "body",
+					}),
+			).toThrow(EmailValidationError)
+		})
+
+		it("should reject domain exceeding 253 characters", () => {
+			const longDomain = `user@${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(63)}.com`
+			expect(
+				() =>
+					new Email({
+						from: longDomain,
+						to: "c@d.com",
+						subject: "Test",
+						text: "body",
+					}),
+			).toThrow(EmailValidationError)
+		})
+
+		it("should reject email with consecutive dots in local part", () => {
+			expect(
+				() =>
+					new Email({
+						from: "user..name@example.com",
+						to: "c@d.com",
+						subject: "Test",
+						text: "body",
+					}),
+			).toThrow(EmailValidationError)
+		})
+
+		it("should reject email with missing TLD", () => {
+			expect(
+				() =>
+					new Email({
+						from: "user@localhost",
+						to: "c@d.com",
+						subject: "Test",
+						text: "body",
+					}),
+			).toThrow(EmailValidationError)
+		})
+	})
+
+	describe("Date and Message-ID format (B-H-X2)", () => {
+		it("should include Date header in RFC 2822 format", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "body",
+			})
+			const data = email.getRawMessage()
+			const dateLine = data.split("\r\n").find((l) => l.startsWith("Date:"))
+			expect(dateLine).toBeDefined()
+			const dateValue = dateLine?.replace("Date: ", "")
+			expect(new Date(dateValue).getTime()).not.toBeNaN()
+		})
+
+		it("should include Message-ID header in angle-bracket format", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "body",
+			})
+			const msgId = email.headers["Message-ID"]
+			expect(msgId).toBeDefined()
+			expect(msgId).toMatch(/^<[^@]+@[^>]+>$/)
+		})
+	})
+
+	describe("MIME boundary structure (B-M1)", () => {
+		it("should produce valid multipart/alternative for text+html", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "plain",
+				html: "<p>html</p>",
+			})
+			const data = email.getRawMessage()
+			const boundaryMatch = data.match(/boundary="([^"]+)"/)
+			expect(boundaryMatch).toBeTruthy()
+			const boundary = boundaryMatch?.[1]
+			expect(data).toContain(`--${boundary}`)
+			expect(data).toContain(`--${boundary}--`)
+			expect(data).toContain("multipart/alternative")
+		})
+	})
+
+	describe("long header value folding (B-M2)", () => {
+		it("should fold header values near 998-char limit", () => {
+			const longValue = Array.from({ length: 50 }, (_, i) => `word${i}`).join(" ")
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "body",
+				headers: { "X-Long": longValue },
+			})
+			const data = email.getRawMessage()
+			const lines = data.split("\r\n")
+			for (const line of lines) {
+				expect(line.length).toBeLessThanOrEqual(998)
+			}
+			const headerSection = data.split("\r\n\r\n")[0]
+			const unfolded = headerSection.replace(/\r\n[ \t]/g, " ")
+			expect(unfolded).toContain("X-Long:")
+			expect(unfolded).toContain("word0")
+			expect(unfolded).toContain("word49")
+		})
+	})
+
+	describe("buildContentBody branch coverage (B-M3)", () => {
+		it("should produce text/plain for text-only email", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "plain only",
+			})
+			const data = email.getRawMessage()
+			expect(data).toContain('Content-Type: text/plain; charset="UTF-8"')
+			expect(data).not.toContain("multipart")
+		})
+
+		it("should produce text/html for html-only email", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				html: "<p>html only</p>",
+			})
+			const data = email.getRawMessage()
+			expect(data).toContain('Content-Type: text/html; charset="UTF-8"')
+			expect(data).not.toContain("multipart")
+		})
+
+		it("should produce multipart/alternative for text+html", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "plain",
+				html: "<p>html</p>",
+			})
+			const data = email.getRawMessage()
+			expect(data).toContain("multipart/alternative")
+		})
+
+		it("should produce multipart/mixed for text+attachment", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "plain",
+				attachments: [
+					{
+						filename: "f.txt",
+						content: Buffer.from("data").toString("base64"),
+					},
+				],
+			})
+			const data = email.getRawMessage()
+			expect(data).toContain("multipart/mixed")
+		})
+	})
+
+	describe("boundary collision resistance (B-M4)", () => {
+		it("should generate unique boundaries for nested multipart", () => {
+			const email = new Email({
+				from: "a@b.com",
+				to: "c@d.com",
+				subject: "Test",
+				text: "plain",
+				html: "<p>html</p>",
+				attachments: [
+					{
+						filename: "f.txt",
+						content: Buffer.from("data").toString("base64"),
+					},
+				],
+			})
+			const data = email.getRawMessage()
+			const boundaries = [...data.matchAll(/boundary="([^"]+)"/g)].map((m) => m[1])
+			const unique = new Set(boundaries)
+			expect(unique.size).toBe(boundaries.length)
+		})
+	})
 })
 
 describe("encodeHeader", () => {
@@ -1202,10 +1628,8 @@ describe("encodeHeader", () => {
 		it("should handle text at ASCII boundary (char 127)", () => {
 			const input = "Test\x7F" // DEL character
 			const result = encodeHeader(input)
-			// DEL character (0x7F) is in printable range (33-126) boundary
-			// Our implementation doesn't encode it as it's technically printable
-			// This is acceptable behavior
-			expect(result).toBeTruthy()
+			expect(result).toMatch(/^=\?UTF-8\?Q\?.*\?=$/)
+			expect(result).toContain("=7F")
 		})
 
 		it("should handle text at ASCII boundary (char 128)", () => {

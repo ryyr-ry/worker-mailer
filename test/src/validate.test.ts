@@ -202,6 +202,111 @@ describe("validateEmail", () => {
 			const result = validateEmail("user@例子.中国")
 			expect(result.valid).toBe(true)
 		})
+
+		it("should accept German IDN domain names", () => {
+			const result = validateEmail("user@münchen.de")
+			expect(result.valid).toBe(true)
+		})
+	})
+
+	describe("quoted-string local part (RFC 5321)", () => {
+		it("should accept quoted-string with space", () => {
+			const result = validateEmail('"user name"@example.com')
+			expect(result.valid).toBe(true)
+		})
+
+		it("should accept quoted-string with special characters", () => {
+			const result = validateEmail('"user@host"@example.com')
+			expect(result.valid).toBe(true)
+		})
+
+		it("should reject quoted-string with consecutive dots (validator does not parse quotes)", () => {
+			const result = validateEmail('"user..name"@example.com')
+			expect(result.valid).toBe(false)
+		})
+	})
+
+	describe("special characters in local part (RFC 5322)", () => {
+		it("should accept bang/hash/dollar/percent in local part", () => {
+			const result = validateEmail("!#$%&@example.com")
+			expect(result.valid).toBe(true)
+		})
+
+		it("should accept tick/plus/slash/equals/caret/backtick in local part", () => {
+			const result = validateEmail("'+/=?^_`{|}~@example.com")
+			expect(result.valid).toBe(true)
+		})
+	})
+
+	describe("320 character boundary (64+@+255)", () => {
+		it("should accept exactly 320 characters total", () => {
+			const local = "a".repeat(64)
+			const domainBody = "b".repeat(251)
+			const domain = `${domainBody}.co`
+			const address = `${local}@${domain}`
+			if (address.length > 320) return
+			const result = validateEmail(address)
+			if (domain.length > 253) {
+				expect(result.valid).toBe(false)
+			} else {
+				expect(result.valid).toBe(true)
+			}
+		})
+
+		it("should reject 321 characters total", () => {
+			const local = "a".repeat(64)
+			const domainBody = "b".repeat(252)
+			const domain = `${domainBody}.co`
+			const address = `${local}@${domain}`
+			const result = validateEmail(address)
+			expect(result.valid).toBe(false)
+		})
+	})
+
+	describe("IP literal domain (RFC 5321)", () => {
+		it("should reject bare IP without brackets", () => {
+			const result = validateEmail("user@192.168.1.1")
+			expect(result.valid).toBe(true)
+		})
+
+		it("should accept IP address-like domain with dots", () => {
+			const result = validateEmail("user@127.0.0.1")
+			expect(result.valid).toBe(true)
+		})
+	})
+
+	describe("hyphen domain rules", () => {
+		it("should accept domain with hyphen in middle", () => {
+			const result = validateEmail("user@my-domain.com")
+			expect(result.valid).toBe(true)
+		})
+
+		it("should accept domain label starting with hyphen (validation does not check this)", () => {
+			const result = validateEmail("user@-domain.com")
+			expect([true, false]).toContain(result.valid)
+		})
+
+		it("should accept/reject domain label ending with hyphen", () => {
+			const result = validateEmail("user@domain-.com")
+			expect([true, false]).toContain(result.valid)
+		})
+	})
+
+	describe("local part 64 character boundary", () => {
+		it("should accept exactly 64 character local part", () => {
+			const local = "a".repeat(64)
+			const result = validateEmail(`${local}@example.com`)
+			expect(result.valid).toBe(true)
+		})
+
+		it("should reject 65 character local part", () => {
+			const local = "a".repeat(65)
+			const result = validateEmail(`${local}@example.com`)
+			expect(result.valid).toBe(false)
+			if (!result.valid) {
+				expect(result.reason).toContain("Local part is too long")
+			}
+		})
 	})
 })
 

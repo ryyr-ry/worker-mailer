@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { createCalendarEvent } from "../../src/calendar"
 import { Email } from "../../src/email/email"
 import { previewEmail } from "../../src/preview"
 
@@ -126,6 +127,66 @@ describe("Email preview", () => {
 		expect(directRaw).toContain("body text")
 		expect(preview.raw).toContain("MIME-Version: 1.0")
 		expect(directRaw).toContain("MIME-Version: 1.0")
+	})
+
+	it("preview with calendar event includes text/calendar part", () => {
+		const calResult = createCalendarEvent({
+			summary: "Meeting",
+			start: new Date("2025-03-15T10:00:00Z"),
+			end: new Date("2025-03-15T11:00:00Z"),
+			organizer: { email: "org@example.com" },
+		})
+		const preview = previewEmail({
+			from: "sender@example.com",
+			to: "recipient@example.com",
+			subject: "Invite",
+			text: "You are invited",
+			html: "<p>Invited</p>",
+			calendarEvent: calResult,
+		})
+		expect(preview.raw).toContain("text/calendar")
+	})
+
+	it("preview with inline images includes Content-ID", () => {
+		const preview = previewEmail({
+			from: "sender@example.com",
+			to: "recipient@example.com",
+			subject: "Inline",
+			html: '<img src="cid:logo">',
+			inlineAttachments: [
+				{
+					cid: "logo",
+					filename: "logo.png",
+					content:
+						"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+				},
+			],
+		})
+		expect(preview.raw).toContain("Content-ID: <logo>")
+	})
+
+	it("headers is Record<string,string> containing Date and Message-ID", () => {
+		const preview = previewEmail({
+			from: "sender@example.com",
+			to: "recipient@example.com",
+			subject: "Header test",
+			text: "body",
+		})
+		expect(typeof preview.headers).toBe("object")
+		expect(typeof preview.headers.Date).toBe("string")
+		expect(typeof preview.headers["Message-ID"]).toBe("string")
+		expect(preview.headers.Date.length).toBeGreaterThan(0)
+		expect(preview.headers["Message-ID"].length).toBeGreaterThan(0)
+	})
+
+	it("throws when neither text nor html is provided", () => {
+		expect(() =>
+			previewEmail({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "No body",
+			} as Parameters<typeof previewEmail>[0]),
+		).toThrow()
 	})
 
 	it("User-type From/To resolved to strings in headers", () => {

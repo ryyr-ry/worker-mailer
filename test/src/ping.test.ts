@@ -162,6 +162,36 @@ describe("ping()", () => {
 		})
 	})
 
+	it("sends NOOP command to SMTP server", async () => {
+		setupConnection()
+		mockReader.read.mockResolvedValueOnce({ value: encode("250 OK\r\n") })
+		mockReader.read.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+		const mailer = await WorkerMailer.connect(baseOptions)
+		await mailer.ping()
+
+		const writeArgs = mockWriter.write.mock.calls.map((call: [Uint8Array]) =>
+			new TextDecoder().decode(call[0]),
+		)
+		expect(writeArgs.some((arg: string) => arg.includes("NOOP"))).toBe(true)
+		await mailer.close()
+	})
+
+	it("consecutive pings both succeed", async () => {
+		setupConnection()
+		mockReader.read
+			.mockResolvedValueOnce({ value: encode("250 OK\r\n") })
+			.mockResolvedValueOnce({ value: encode("250 OK\r\n") })
+			.mockResolvedValueOnce({ value: encode("221 Bye\r\n") })
+
+		const mailer = await WorkerMailer.connect(baseOptions)
+		const result1 = await mailer.ping()
+		const result2 = await mailer.ping()
+		expect(result1).toBe(true)
+		expect(result2).toBe(true)
+		await mailer.close()
+	})
+
 	describe("MockMailer", () => {
 		it("returns true when connected", async () => {
 			const mailer = new MockMailer()

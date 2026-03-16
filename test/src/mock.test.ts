@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { sendBatch } from "../../src/batch"
 import type { EmailOptions } from "../../src/email"
 import { SmtpConnectionError } from "../../src/errors"
@@ -143,6 +143,35 @@ describe("MockMailer", () => {
 		expect(typeof mailer.close).toBe("function")
 		expect(typeof mailer.ping).toBe("function")
 		expect(typeof mailer[Symbol.asyncDispose]).toBe("function")
+	})
+
+	it("to as empty array results in empty accepted list", async () => {
+		const mailer = new MockMailer()
+		const result = await mailer.send({ ...baseEmail, to: [] })
+		expect(result.accepted).toEqual([])
+	})
+
+	it("simulateDelay works with fake timers", async () => {
+		vi.useFakeTimers()
+		const mailer = new MockMailer({ simulateDelay: 1000 })
+		const sendPromise = mailer.send(baseEmail)
+		await vi.advanceTimersByTimeAsync(1000)
+		const result = await sendPromise
+		expect(result.messageId).toBeDefined()
+		vi.useRealTimers()
+	})
+
+	it("sentEmails stores options object", async () => {
+		const mailer = new MockMailer()
+		const opts = { ...baseEmail }
+		await mailer.send(opts)
+		expect(mailer.sentEmails[0].options).toBe(opts)
+	})
+
+	it("send() after close() throws SmtpConnectionError", async () => {
+		const mailer = new MockMailer()
+		await mailer.close()
+		await expect(mailer.send(baseEmail)).rejects.toThrow(SmtpConnectionError)
 	})
 
 	it("sentEmails is readonly", () => {
