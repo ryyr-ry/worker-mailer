@@ -19,7 +19,7 @@ export function createTestEmail(options: TestEmailOptions): EmailOptions {
 		text: [
 			"✅ worker-mailer: 送信テスト成功",
 			"",
-			`送信元: ${typeof options.from === "string" ? options.from : options.from}`,
+			`送信元: ${options.from}`,
 			`時刻: ${timestamp}`,
 			options.smtpHost ? `SMTP: ${options.smtpHost}` : "",
 			"",
@@ -34,7 +34,7 @@ export function createTestEmail(options: TestEmailOptions): EmailOptions {
 <h1 style="color:#22c55e;font-size:24px">✅ 送信テスト成功</h1>
 <p style="color:#374151">worker-mailer からのメールが正常に届きました。</p>
 <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">
-<p>送信元: <code>${escapeHtml(typeof options.from === "string" ? options.from : options.from)}</code></p>
+<p>送信元: <code>${escapeHtml(options.from)}</code></p>
 <p>時刻: <code>${escapeHtml(timestamp)}</code></p>
 ${hostInfo}
 <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">

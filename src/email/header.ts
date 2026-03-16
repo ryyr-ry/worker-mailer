@@ -119,7 +119,7 @@ export function resolveHeaders(params: {
 	if (!headers["Reply-To"] && reply) headers["Reply-To"] = formatUserAddress(reply)
 	if (!headers.CC && cc) headers.CC = cc.map(formatUserAddress).join(", ")
 	if (!headers.Subject && subject) headers.Subject = encodeHeader(subject)
-	headers.Date = headers.Date ?? new Date().toUTCString()
+	headers.Date = headers.Date ?? new Date().toUTCString().replace("GMT", "+0000")
 	headers["Message-ID"] =
 		headers["Message-ID"] ?? `<${crypto.randomUUID()}@${from.email.split("@").pop()}>`
 }

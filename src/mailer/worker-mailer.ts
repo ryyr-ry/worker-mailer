@@ -233,9 +233,7 @@ export class WorkerMailer implements Mailer {
 		this.emailSending?.setSentError?.(err)
 		while (this.emailToBeSent.length > 0) (await this.emailToBeSent.dequeue()).setSentError(err)
 		this.emailToBeSent.close()
-		try {
-			await this.transport.quit()
-		} catch {}
+		await this.transport.quit().catch(() => this.logger.debug("[WorkerMailer] QUIT failed"))
 		this.hooks?.onDisconnected?.({ reason: error?.message })
 	}
 	async [Symbol.asyncDispose](): Promise<void> {

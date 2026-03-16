@@ -36,7 +36,7 @@ export function createCalendarEvent(options: CalendarEventOptions): CalendarEven
 
 	if (options.location) lines.push(`LOCATION:${escapeIcalText(options.location)}`)
 	if (options.description) lines.push(`DESCRIPTION:${escapeIcalText(options.description)}`)
-	if (options.url) lines.push(`URL:${options.url}`)
+	if (options.url) lines.push(`URL:${options.url.replace(/[\r\n]/g, "")}`)
 
 	lines.push(`DTSTAMP:${formatDateUtc(new Date())}`)
 
