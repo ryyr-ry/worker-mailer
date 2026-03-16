@@ -4,13 +4,21 @@ import { encode, toBase64 } from "../utils"
 import type { SmtpTransport } from "./transport"
 import type { AuthType, Credentials, SmtpCapabilities } from "./types"
 
-export async function authenticate(
-	transport: SmtpTransport,
-	credentials: Credentials,
-	capabilities: SmtpCapabilities,
-	preferredTypes: AuthType[],
-	logger: Logger,
-): Promise<void> {
+interface AuthenticateParams {
+	transport: SmtpTransport
+	credentials: Credentials
+	capabilities: SmtpCapabilities
+	preferredTypes: AuthType[]
+	logger: Logger
+}
+
+export async function authenticate({
+	transport,
+	credentials,
+	capabilities,
+	preferredTypes,
+	logger,
+}: AuthenticateParams): Promise<void> {
 	if (!capabilities.allowAuth) {
 		return
 	}

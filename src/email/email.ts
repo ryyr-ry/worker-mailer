@@ -118,22 +118,10 @@ export class Email {
 
 	private validateEmailAddresses() {
 		this.validateEmail(this.from.email, "from")
-		for (const user of this.to) {
-			this.validateEmail(user.email, "to")
-		}
-		if (this.cc) {
-			for (const user of this.cc) {
-				this.validateEmail(user.email, "cc")
-			}
-		}
-		if (this.bcc) {
-			for (const user of this.bcc) {
-				this.validateEmail(user.email, "bcc")
-			}
-		}
-		if (this.reply) {
-			this.validateEmail(this.reply.email, "reply-to")
-		}
+		for (const user of this.to) this.validateEmail(user.email, "to")
+		if (this.cc) for (const user of this.cc) this.validateEmail(user.email, "cc")
+		if (this.bcc) for (const user of this.bcc) this.validateEmail(user.email, "bcc")
+		if (this.reply) this.validateEmail(this.reply.email, "reply-to")
 	}
 
 	private static readonly ANGLE_BRACKET_PATTERN = /[<>]/
@@ -159,6 +147,7 @@ export class Email {
 		}
 	}
 
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control char detection for security
 	private static readonly CRLF_OR_CONTROL_PATTERN = /[\r\n\x00-\x1f]/
 
 	private static validateAttachmentEntry(attachment: Attachment | InlineAttachment) {
@@ -167,10 +156,7 @@ export class Email {
 				`Invalid attachment filename: ${attachment.filename.replaceAll(/[\r\n]/g, "?")}`,
 			)
 		}
-		if (
-			attachment.mimeType &&
-			Email.CRLF_OR_CONTROL_PATTERN.test(attachment.mimeType)
-		) {
+		if (attachment.mimeType && Email.CRLF_OR_CONTROL_PATTERN.test(attachment.mimeType)) {
 			throw new CrlfInjectionError("attachment mimeType")
 		}
 		if (typeof attachment.content === "string" && !Email.BASE64_PATTERN.test(attachment.content)) {
@@ -204,11 +190,7 @@ export class Email {
 		}
 	}
 
-	private static readonly VALID_CALENDAR_METHODS = new Set([
-		"REQUEST",
-		"CANCEL",
-		"REPLY",
-	])
+	private static readonly VALID_CALENDAR_METHODS = new Set(["REQUEST", "CANCEL", "REPLY"])
 
 	private validateCalendarEvent() {
 		if (!this.calendarEvent) return

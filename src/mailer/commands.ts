@@ -5,13 +5,21 @@ import type { SmtpCapabilities } from "./types"
 
 type DsnParam = Omit<DsnOptions, "envelopeId"> | DsnOptions
 
-export async function mailFrom(
-	transport: SmtpTransport,
-	fromEmail: string,
-	capabilities: SmtpCapabilities,
-	dsnGlobal?: DsnParam,
-	dsnOverride?: DsnOptions,
-): Promise<void> {
+interface MailFromParams {
+	transport: SmtpTransport
+	fromEmail: string
+	capabilities: SmtpCapabilities
+	dsnGlobal?: DsnParam
+	dsnOverride?: DsnOptions
+}
+
+export async function mailFrom({
+	transport,
+	fromEmail,
+	capabilities,
+	dsnGlobal,
+	dsnOverride,
+}: MailFromParams): Promise<void> {
 	let message = `MAIL FROM: <${fromEmail}>`
 	if (capabilities.supportsDSN) {
 		message += ` ${buildRet(dsnGlobal, dsnOverride)}`
@@ -19,6 +27,7 @@ export async function mailFrom(
 			if (/[\r\n]/.test(dsnOverride.envelopeId)) {
 				throw new CrlfInjectionError("DSN envelope ID")
 			}
+			// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional xtext validation per RFC 3461
 			if (/[\x00-\x20\x7f+=]/.test(dsnOverride.envelopeId)) {
 				throw new SmtpCommandError(
 					"MAIL FROM",
@@ -35,13 +44,21 @@ export async function mailFrom(
 	}
 }
 
-export async function rcptTo(
-	transport: SmtpTransport,
-	recipients: ReadonlyArray<{ email: string }>,
-	capabilities: SmtpCapabilities,
-	dsnGlobal?: DsnParam,
-	dsnOverride?: DsnOptions,
-): Promise<void> {
+interface RcptToParams {
+	transport: SmtpTransport
+	recipients: ReadonlyArray<{ email: string }>
+	capabilities: SmtpCapabilities
+	dsnGlobal?: DsnParam
+	dsnOverride?: DsnOptions
+}
+
+export async function rcptTo({
+	transport,
+	recipients,
+	capabilities,
+	dsnGlobal,
+	dsnOverride,
+}: RcptToParams): Promise<void> {
 	for (const user of recipients) {
 		let message = `RCPT TO: <${user.email}>`
 		if (capabilities.supportsDSN) {

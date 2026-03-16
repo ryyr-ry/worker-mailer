@@ -93,6 +93,11 @@ export function foldHeaderLine(line: string, maxLen = 78): string {
 	return parts.join("\r\n")
 }
 
+function formatUserAddress(user: User): string {
+	if (user.name) return `"${encodeHeader(user.name)}" <${user.email}>`
+	return user.email
+}
+
 export function resolveHeaders(params: {
 	from: User
 	to: User[]
@@ -109,46 +114,11 @@ export function resolveHeaders(params: {
 		}
 	}
 
-	if (!headers.From) {
-		let fromValue = from.email
-		if (from.name) {
-			fromValue = `"${encodeHeader(from.name)}" <${fromValue}>`
-		}
-		headers.From = fromValue
-	}
-
-	if (!headers.To) {
-		const toAddresses = to.map((user) => {
-			if (user.name) {
-				return `"${encodeHeader(user.name)}" <${user.email}>`
-			}
-			return user.email
-		})
-		headers.To = toAddresses.join(", ")
-	}
-
-	if (!headers["Reply-To"] && reply) {
-		let replyAddress = reply.email
-		if (reply.name) {
-			replyAddress = `"${encodeHeader(reply.name)}" <${replyAddress}>`
-		}
-		headers["Reply-To"] = replyAddress
-	}
-
-	if (!headers.CC && cc) {
-		const ccAddresses = cc.map((user) => {
-			if (user.name) {
-				return `"${encodeHeader(user.name)}" <${user.email}>`
-			}
-			return user.email
-		})
-		headers.CC = ccAddresses.join(", ")
-	}
-
-	if (!headers.Subject && subject) {
-		headers.Subject = encodeHeader(subject)
-	}
-
+	if (!headers.From) headers.From = formatUserAddress(from)
+	if (!headers.To) headers.To = to.map(formatUserAddress).join(", ")
+	if (!headers["Reply-To"] && reply) headers["Reply-To"] = formatUserAddress(reply)
+	if (!headers.CC && cc) headers.CC = cc.map(formatUserAddress).join(", ")
+	if (!headers.Subject && subject) headers.Subject = encodeHeader(subject)
 	headers.Date = headers.Date ?? new Date().toUTCString()
 	headers["Message-ID"] =
 		headers["Message-ID"] ?? `<${crypto.randomUUID()}@${from.email.split("@").pop()}>`

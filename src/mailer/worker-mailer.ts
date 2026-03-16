@@ -7,10 +7,9 @@ import { ConfigurationError, SmtpConnectionError } from "../errors"
 import Logger from "../logger"
 import type { SendResult } from "../result"
 import { BlockingQueue, backoff } from "../utils"
-import { authenticate } from "./auth"
 import { dataCommand, mailFrom, noop, rcptTo, rset, sendBody } from "./commands"
 import { inferSecurity, validatePortSecurity } from "./config"
-import { ehlo, greet, startTls } from "./handshake"
+import { initializeSession } from "./session"
 import { SmtpTransport } from "./transport"
 import {
 	type AuthType,
@@ -54,9 +53,10 @@ export class WorkerMailer implements Mailer {
 		this.startTlsEnabled = startTls
 		validatePortSecurity(this.port, this.secure, this.startTlsEnabled)
 		this.authType = options.authType ?? []
-		if (options.username !== undefined && options.password !== undefined) {
-			this.credentials = { username: options.username, password: options.password }
-		} else if (options.username !== undefined || options.password !== undefined) {
+		const { username, password } = options
+		if (username !== undefined && password !== undefined) {
+			this.credentials = { username, password }
+		} else if (username !== undefined || password !== undefined) {
 			throw new ConfigurationError(
 				"[WorkerMailer] Both username and password must be provided together",
 			)
@@ -90,37 +90,22 @@ export class WorkerMailer implements Mailer {
 		if (this.hooks?.beforeSend) {
 			const hookResult = await this.hooks.beforeSend(options)
 			if (hookResult === false) throw new SendCancelledError()
-			if (hookResult && typeof hookResult === "object") {
-				emailOptions = hookResult
-			}
+			if (hookResult && typeof hookResult === "object") emailOptions = hookResult
 		}
 		const email = new Email(emailOptions)
 		this.emailToBeSent.enqueue(email)
 		return email.sentResult
 	}
 	private async initializeSmtpSession(): Promise<void> {
-		this.logger.info("[WorkerMailer] Connecting to SMTP server")
-		await this.transport.waitForOpen(this.socketTimeoutMs)
-		this.logger.info("[WorkerMailer] SMTP server connected")
-		await greet(this.transport)
-		this.capabilities = await ehlo(this.transport, this.ehloHostname)
-		if (this.startTlsEnabled && !this.secure && this.capabilities.supportsStartTls) {
-			await startTls(this.transport)
-			this.capabilities = await ehlo(this.transport, this.ehloHostname)
-		}
-		if (this.credentials) {
-			await authenticate(
-				this.transport,
-				this.credentials,
-				this.capabilities,
-				this.authType,
-				this.logger,
-			)
-		} else if (this.capabilities.allowAuth) {
-			throw new ConfigurationError(
-				"[WorkerMailer] Authentication required but no credentials provided",
-			)
-		}
+		this.capabilities = await initializeSession(this.transport, {
+			socketTimeoutMs: this.socketTimeoutMs,
+			ehloHostname: this.ehloHostname,
+			startTlsEnabled: this.startTlsEnabled,
+			secure: this.secure,
+			credentials: this.credentials,
+			authType: this.authType,
+			logger: this.logger,
+		})
 		this.active = true
 	}
 	private async start(): Promise<void> {
@@ -156,13 +141,16 @@ export class WorkerMailer implements Mailer {
 			} catch {}
 		}
 	}
+	private get dsnCtx() {
+		return { transport: this.transport, capabilities: this.capabilities, dsnGlobal: this.dsn }
+	}
 	private async executeSend(): Promise<void> {
 		if (!this.emailSending) return
 		const startTime = Date.now()
 		const email = this.emailSending
 		const allRecipients = [...(email.to ?? []), ...(email.cc ?? []), ...(email.bcc ?? [])]
-		await mailFrom(this.transport, email.from.email, this.capabilities, this.dsn, email.dsnOverride)
-		await rcptTo(this.transport, allRecipients, this.capabilities, this.dsn, email.dsnOverride)
+		await mailFrom({ ...this.dsnCtx, fromEmail: email.from.email, dsnOverride: email.dsnOverride })
+		await rcptTo({ ...this.dsnCtx, recipients: allRecipients, dsnOverride: email.dsnOverride })
 		await dataCommand(this.transport)
 		let rawMessage = email.getRawMessage()
 		if (this.dkimOptions) {
@@ -218,10 +206,9 @@ export class WorkerMailer implements Mailer {
 		return new SmtpTransport(socket, this.logger, this.responseTimeoutMs)
 	}
 	private async tryReconnect(): Promise<boolean> {
-		const maxAttempts = 3
-		for (let i = 0; i < maxAttempts; i++) {
+		for (let i = 0; i < 3; i++) {
 			try {
-				this.logger.info(`[WorkerMailer] Reconnecting (attempt ${i + 1}/${maxAttempts})`)
+				this.logger.info(`[WorkerMailer] Reconnecting (attempt ${i + 1}/3)`)
 				this.hooks?.onReconnecting?.({ attempt: i + 1 })
 				this.transport.safeClose()
 				this.transport = this.createTransport()
@@ -230,9 +217,10 @@ export class WorkerMailer implements Mailer {
 				this.logger.info("[WorkerMailer] Reconnection successful")
 				return true
 			} catch (err: unknown) {
-				const msg = err instanceof Error ? err.message : String(err)
-				this.logger.error(`[WorkerMailer] Reconnect failed: ${msg}`)
-				if (i < maxAttempts - 1) await backoff(i)
+				this.logger.error(
+					`[WorkerMailer] Reconnect failed: ${err instanceof Error ? err.message : String(err)}`,
+				)
+				if (i < 2) await backoff(i)
 			}
 		}
 		return false
@@ -244,9 +232,7 @@ export class WorkerMailer implements Mailer {
 		this.emailSending?.setSentError?.(err)
 		while (this.emailToBeSent.length > 0) (await this.emailToBeSent.dequeue()).setSentError(err)
 		this.emailToBeSent.close()
-		if (this.sendingPromise) {
-			await this.sendingPromise.catch(() => {})
-		}
+		if (this.sendingPromise) await this.sendingPromise.catch(() => {})
 		try {
 			await this.transport.quit()
 		} catch {}
@@ -256,11 +242,9 @@ export class WorkerMailer implements Mailer {
 		await this.close()
 	}
 	async ping(): Promise<boolean> {
-		if (!this.active || !this.transport) return false
-		return noop(this.transport)
+		return this.active && this.transport ? noop(this.transport) : false
 	}
 	private reportFatalError(error: Error): void {
-		if (this.hooks?.onFatalError) this.hooks.onFatalError(error)
-		else console.error(error)
+		this.hooks?.onFatalError ? this.hooks.onFatalError(error) : console.error(error)
 	}
 }
