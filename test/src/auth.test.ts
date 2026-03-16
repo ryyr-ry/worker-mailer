@@ -110,7 +110,7 @@ describe("authenticate", () => {
 
 	describe("CRAM-MD5認証", () => {
 		// HMAC-MD5はCloudflare Workers環境でのみサポート（Vitest/Node環境では非サポート）
-		it.skip("正常にCRAM-MD5認証が成功する", async () => {
+		it("正常にCRAM-MD5認証が成功する", async () => {
 			const challenge = btoa("test-challenge-string")
 			const transport = createMockTransport()
 			transport.readTimeout

@@ -3,7 +3,7 @@ import { type DkimOptions, resolveDkimKey, signDkim } from "../dkim"
 import { Email } from "../email/email"
 import { applyDotStuffing } from "../email/mime"
 import type { EmailOptions } from "../email/types"
-import { ConfigurationError, SmtpConnectionError } from "../errors"
+import { ConfigurationError, CrlfInjectionError, SmtpConnectionError } from "../errors"
 import Logger from "../logger"
 import type { SendResult } from "../result"
 import { BlockingQueue, backoff } from "../utils"
@@ -177,7 +177,7 @@ export class WorkerMailer implements Mailer {
 		this.logger.error(
 			`[WorkerMailer] Send failed: ${message} (attempt ${attempt + 1}/${this.maxRetries + 1})`,
 		)
-		if (!this.active) {
+		if (!this.active || e instanceof CrlfInjectionError || e instanceof ConfigurationError) {
 			this.emailSending.setSentError(e)
 			return true
 		}
@@ -232,7 +232,6 @@ export class WorkerMailer implements Mailer {
 		this.emailSending?.setSentError?.(err)
 		while (this.emailToBeSent.length > 0) (await this.emailToBeSent.dequeue()).setSentError(err)
 		this.emailToBeSent.close()
-		if (this.sendingPromise) await this.sendingPromise.catch(() => {})
 		try {
 			await this.transport.quit()
 		} catch {}

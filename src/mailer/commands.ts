@@ -1,5 +1,5 @@
 import type { DsnOptions } from "../email/types"
-import { CrlfInjectionError, SmtpCommandError } from "../errors"
+import { ConfigurationError, CrlfInjectionError, SmtpCommandError } from "../errors"
 import type { SmtpTransport } from "./transport"
 import type { SmtpCapabilities } from "./types"
 
@@ -29,8 +29,7 @@ export async function mailFrom({
 			}
 			// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional xtext validation per RFC 3461
 			if (/[\x00-\x20\x7f+=]/.test(dsnOverride.envelopeId)) {
-				throw new SmtpCommandError(
-					"MAIL FROM",
+				throw new ConfigurationError(
 					"DSN envelope ID contains invalid characters (spaces, control chars, + or =)",
 				)
 			}

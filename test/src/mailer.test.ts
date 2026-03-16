@@ -1,6 +1,7 @@
 import { connect } from "cloudflare:sockets"
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 import {
+	ConfigurationError,
 	CrlfInjectionError,
 	EmailValidationError,
 	SmtpAuthError,
@@ -800,7 +801,9 @@ describe("WorkerMailer", () => {
 			})
 
 			// Simulate server closing connection (done: true)
-			mockReader.read.mockResolvedValueOnce({ value: undefined, done: true })
+			mockReader.read
+				.mockResolvedValueOnce({ value: undefined, done: true })
+				.mockResolvedValueOnce({ value: undefined, done: true })
 
 			await expect(
 				mailer.send({
@@ -900,6 +903,9 @@ describe("WorkerMailer", () => {
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("235 Authentication successful\r\n"),
 				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 OK\r\n"),
+				})
 
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
@@ -936,6 +942,9 @@ describe("WorkerMailer", () => {
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("235 Authentication successful\r\n"),
 				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 OK\r\n"),
+				})
 
 			const mailer = await WorkerMailer.connect({
 				host: "smtp.example.com",
@@ -954,7 +963,7 @@ describe("WorkerMailer", () => {
 					text: "test",
 					dsnOverride: { envelopeId: "myid SIZE=999999999" },
 				}),
-			).rejects.toThrow(SmtpCommandError)
+			).rejects.toThrow(ConfigurationError)
 
 			await mailer.close()
 		})
@@ -971,6 +980,9 @@ describe("WorkerMailer", () => {
 				})
 				.mockResolvedValueOnce({
 					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("250 OK\r\n"),
 				})
 
 			const mailer = await WorkerMailer.connect({
@@ -990,10 +1002,11 @@ describe("WorkerMailer", () => {
 					text: "test",
 					dsnOverride: { envelopeId: "id+injected=value" },
 				}),
-			).rejects.toThrow(SmtpCommandError)
+			).rejects.toThrow(ConfigurationError)
 
 			await mailer.close()
 		})
+		it("should warn when CRAM-MD5 authentication is used", async () => {
 			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
 
 			mockReader.read
