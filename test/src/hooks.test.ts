@@ -7,6 +7,11 @@ vi.mock("cloudflare:sockets", () => ({
 	connect: vi.fn(),
 }))
 
+vi.mock("../../src/utils", async (importOriginal) => {
+	const mod = await importOriginal<typeof import("../../src/utils")>()
+	return { ...mod, backoff: () => Promise.resolve() }
+})
+
 describe("SendHooks", () => {
 	interface MockReader {
 		read: Mock

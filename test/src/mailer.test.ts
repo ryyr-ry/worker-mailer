@@ -14,6 +14,11 @@ vi.mock("cloudflare:sockets", () => ({
 	connect: vi.fn(),
 }))
 
+vi.mock("../../src/utils", async (importOriginal) => {
+	const mod = await importOriginal<typeof import("../../src/utils")>()
+	return { ...mod, backoff: () => Promise.resolve() }
+})
+
 describe("WorkerMailer", () => {
 	interface MockReader {
 		read: Mock
@@ -2075,9 +2080,9 @@ describe("WorkerMailer", () => {
 				text: "body",
 			})
 			await expect(sendPromise).rejects.toThrow()
-			await new Promise<void>((resolve) => setTimeout(resolve, 6000))
+			await new Promise<void>((resolve) => setTimeout(resolve, 100))
 			expect(onFatalError).toHaveBeenCalled()
-		}, 15_000)
+		})
 	})
 
 	describe("malformed server responses (B-H-X1)", () => {
