@@ -513,4 +513,61 @@ describe("DKIM signing", () => {
 			expect(tags.bh).not.toBe(toBase64(digest))
 		})
 	})
+
+	describe("エッジケース (#33)", () => {
+		it("空ボディのメッセージに署名できる", async () => {
+			const rawMessage = "From: a@b.com\r\nTo: c@d.com\r\nSubject: test\r\n\r\n"
+			const signed = await signDkim(rawMessage, {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testKeyPair.privateKey,
+			})
+			expect(signed).toContain("DKIM-Signature:")
+			expect(signed).toContain("bh=")
+		})
+
+		it("simple/simple正規化で署名できる", async () => {
+			const rawMessage = buildTestMessage()
+			const signed = await signDkim(rawMessage, {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testKeyPair.privateKey,
+				canonicalization: "simple/simple",
+			})
+			expect(signed).toContain("c=simple/simple")
+		})
+
+		it("relaxed/simple正規化で署名できる", async () => {
+			const rawMessage = buildTestMessage()
+			const signed = await signDkim(rawMessage, {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testKeyPair.privateKey,
+				canonicalization: "relaxed/simple",
+			})
+			expect(signed).toContain("c=relaxed/simple")
+		})
+
+		it("simple/relaxed正規化で署名できる", async () => {
+			const rawMessage = buildTestMessage()
+			const signed = await signDkim(rawMessage, {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testKeyPair.privateKey,
+				canonicalization: "simple/relaxed",
+			})
+			expect(signed).toContain("c=simple/relaxed")
+		})
+
+		it("カスタムheaderFieldNamesを指定できる", async () => {
+			const rawMessage = buildTestMessage()
+			const signed = await signDkim(rawMessage, {
+				domainName: "example.com",
+				keySelector: "test",
+				privateKey: testKeyPair.privateKey,
+				headerFieldNames: ["from", "to"],
+			})
+			expect(signed).toContain("h=from:to")
+		})
+	})
 })
