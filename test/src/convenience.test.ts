@@ -102,19 +102,19 @@ describe("convenience", () => {
 			expect(options.logLevel).toBeUndefined()
 		})
 
-		it("should throw for port 0", () => {
+		it("accepts port 0 without range validation", () => {
 			const env = { SMTP_HOST: "h", SMTP_PORT: "0" }
 			const options = fromEnv(env)
 			expect(options.port).toBe(0)
 		})
 
-		it("should throw for port 65536", () => {
+		it("accepts port 65536 without range validation", () => {
 			const env = { SMTP_HOST: "h", SMTP_PORT: "65536" }
 			const options = fromEnv(env)
 			expect(options.port).toBe(65536)
 		})
 
-		it("should throw for negative port", () => {
+		it("accepts negative port without range validation", () => {
 			const env = { SMTP_HOST: "h", SMTP_PORT: "-1" }
 			const options = fromEnv(env)
 			expect(options.port).toBe(-1)

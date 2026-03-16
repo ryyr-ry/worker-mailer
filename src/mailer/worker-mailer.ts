@@ -76,9 +76,8 @@ export class WorkerMailer implements Mailer {
 		const mailer = new WorkerMailer(options)
 		await mailer.initializeSmtpSession()
 		mailer.hooks?.onConnected?.({ host: mailer.host, port: mailer.port })
-		mailer.start().catch((error: unknown) => {
-			const normalizedError = error instanceof Error ? error : new Error(String(error))
-			mailer.reportFatalError(normalizedError)
+		mailer.start().catch((e: unknown) => {
+			mailer.reportFatalError(e instanceof Error ? e : new Error(String(e)))
 		})
 		return mailer
 	}
@@ -145,7 +144,7 @@ export class WorkerMailer implements Mailer {
 			}
 		}
 		if (this.active && this.emailSending) {
-			const error = new Error(
+			const error = new SmtpConnectionError(
 				`[WorkerMailer] Send failed: max retries (${this.maxRetries}) exceeded`,
 			)
 			this.emailSending.setSentError(error)
@@ -240,7 +239,7 @@ export class WorkerMailer implements Mailer {
 	public async close(error?: Error): Promise<void> {
 		this.active = false
 		this.logger.info("[WorkerMailer] Closing connection", error?.message || "")
-		const err = error || new Error("[WorkerMailer] Mailer is shutting down")
+		const err = error || new SmtpConnectionError("[WorkerMailer] Mailer is shutting down")
 		this.emailSending?.setSentError?.(err)
 		while (this.emailToBeSent.length > 0) (await this.emailToBeSent.dequeue()).setSentError(err)
 		this.emailToBeSent.close()
