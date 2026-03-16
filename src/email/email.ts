@@ -159,11 +159,19 @@ export class Email {
 		}
 	}
 
+	private static readonly CRLF_OR_CONTROL_PATTERN = /[\r\n\x00-\x1f]/
+
 	private static validateAttachmentEntry(attachment: Attachment | InlineAttachment) {
 		if (Email.UNSAFE_FILENAME_PATTERN.test(attachment.filename)) {
 			throw new EmailValidationError(
 				`Invalid attachment filename: ${attachment.filename.replaceAll(/[\r\n]/g, "?")}`,
 			)
+		}
+		if (
+			attachment.mimeType &&
+			Email.CRLF_OR_CONTROL_PATTERN.test(attachment.mimeType)
+		) {
+			throw new CrlfInjectionError("attachment mimeType")
 		}
 		if (typeof attachment.content === "string" && !Email.BASE64_PATTERN.test(attachment.content)) {
 			throw new EmailValidationError(`Invalid base64 content in attachment: ${attachment.filename}`)
@@ -196,10 +204,24 @@ export class Email {
 		}
 	}
 
+	private static readonly VALID_CALENDAR_METHODS = new Set([
+		"REQUEST",
+		"CANCEL",
+		"REPLY",
+	])
+
 	private validateCalendarEvent() {
 		if (!this.calendarEvent) return
 		if (!this.calendarEvent.content || this.calendarEvent.content.length === 0) {
 			throw new EmailValidationError("Calendar event content must not be empty")
+		}
+		if (
+			this.calendarEvent.method !== undefined &&
+			!Email.VALID_CALENDAR_METHODS.has(this.calendarEvent.method)
+		) {
+			throw new EmailValidationError(
+				`Invalid calendar method: ${String(this.calendarEvent.method).slice(0, 20)}`,
+			)
 		}
 	}
 

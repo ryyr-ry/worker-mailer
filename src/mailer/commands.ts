@@ -19,6 +19,12 @@ export async function mailFrom(
 			if (/[\r\n]/.test(dsnOverride.envelopeId)) {
 				throw new CrlfInjectionError("DSN envelope ID")
 			}
+			if (/[\x00-\x20\x7f+=]/.test(dsnOverride.envelopeId)) {
+				throw new SmtpCommandError(
+					"MAIL FROM",
+					"DSN envelope ID contains invalid characters (spaces, control chars, + or =)",
+				)
+			}
 			message += ` ENVID=${dsnOverride.envelopeId}`
 		}
 	}

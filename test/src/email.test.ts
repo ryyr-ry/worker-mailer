@@ -873,6 +873,113 @@ describe("Email", () => {
 			expect(email.attachments).toHaveLength(1)
 		})
 
+		it("should reject attachment mimeType with CRLF (MIME header injection)", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "recipient@example.com",
+						subject: "test",
+						text: "test",
+						attachments: [
+							{
+								filename: "file.txt",
+								content: Buffer.from("data").toString("base64"),
+								mimeType: "text/plain\r\nBcc: attacker@evil.com",
+							},
+						],
+					}),
+			).toThrow(CrlfInjectionError)
+		})
+
+		it("should reject attachment mimeType with control characters", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "recipient@example.com",
+						subject: "test",
+						text: "test",
+						attachments: [
+							{
+								filename: "file.txt",
+								content: Buffer.from("data").toString("base64"),
+								mimeType: "text/plain\x00",
+							},
+						],
+					}),
+			).toThrow(CrlfInjectionError)
+		})
+
+		it("should reject inline attachment mimeType with CRLF", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "recipient@example.com",
+						subject: "test",
+						html: '<img src="cid:img1" />',
+						inlineAttachments: [
+							{
+								cid: "img1",
+								filename: "image.png",
+								content: Buffer.from("data").toString("base64"),
+								mimeType: "image/png\r\nX-Injected: true",
+							},
+						],
+					}),
+			).toThrow(CrlfInjectionError)
+		})
+
+		it("should accept safe mimeType values", () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "test",
+				text: "test",
+				attachments: [
+					{
+						filename: "file.pdf",
+						content: Buffer.from("data").toString("base64"),
+						mimeType: "application/pdf",
+					},
+				],
+			})
+			expect(email.attachments?.[0].mimeType).toBe("application/pdf")
+		})
+
+		it("should reject calendar event with invalid method at runtime", () => {
+			expect(
+				() =>
+					new Email({
+						from: "sender@example.com",
+						to: "recipient@example.com",
+						subject: "test",
+						html: "<p>event</p>",
+						calendarEvent: {
+							content: "BEGIN:VCALENDAR\r\nEND:VCALENDAR",
+							method: "EVIL\r\nBcc: attacker@evil.com" as "REQUEST",
+						},
+					}),
+			).toThrow(EmailValidationError)
+		})
+
+		it("should accept valid calendar method values", () => {
+			for (const method of ["REQUEST", "CANCEL", "REPLY"] as const) {
+				const email = new Email({
+					from: "sender@example.com",
+					to: "recipient@example.com",
+					subject: "test",
+					html: "<p>event</p>",
+					calendarEvent: {
+						content: "BEGIN:VCALENDAR\r\nEND:VCALENDAR",
+						method,
+					},
+				})
+				expect(email.calendarEvent?.method).toBe(method)
+			}
+		})
+
 		it("should encode Uint8Array attachment content to base64 in email data", () => {
 			const binaryContent = new Uint8Array([72, 101, 108, 108, 111])
 			const email = new Email({

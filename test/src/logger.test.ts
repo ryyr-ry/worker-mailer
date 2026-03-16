@@ -155,6 +155,22 @@ describe("Logger", () => {
 			expect(msg).toContain("[REDACTED]")
 			expect(msg).not.toContain(longBase64)
 		})
+
+		it("sanitizes standalone short base64 on its own line (AUTH LOGIN credentials)", () => {
+			const logger = new Logger(LogLevel.DEBUG, "[SMTP]")
+			logger.debug("Write to socket:\ndXNlcm5hbWU=\r\n")
+			const msg = consoleSpy.debug.mock.calls[0][0] as string
+			expect(msg).toContain("[REDACTED]")
+			expect(msg).not.toContain("dXNlcm5hbWU=")
+		})
+
+		it("sanitizes standalone password base64 on its own line", () => {
+			const logger = new Logger(LogLevel.DEBUG, "[SMTP]")
+			logger.debug("Write to socket:\ncGFzc3dvcmQ=\r\n")
+			const msg = consoleSpy.debug.mock.calls[0][0] as string
+			expect(msg).toContain("[REDACTED]")
+			expect(msg).not.toContain("cGFzc3dvcmQ=")
+		})
 	})
 
 	describe("constructor defaults", () => {

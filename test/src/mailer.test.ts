@@ -923,7 +923,77 @@ describe("WorkerMailer", () => {
 			await mailer.close()
 		})
 
-		it("should warn when CRAM-MD5 authentication is used", async () => {
+		it("should reject DSN envelope ID with space (parameter injection)", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250-DSN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain", "login"],
+				maxRetries: 0,
+			})
+
+			await expect(
+				mailer.send({
+					from: { email: "sender@example.com" },
+					to: [{ email: "legit@example.com" }],
+					subject: "test",
+					text: "test",
+					dsnOverride: { envelopeId: "myid SIZE=999999999" },
+				}),
+			).rejects.toThrow(SmtpCommandError)
+
+			await mailer.close()
+		})
+
+		it("should reject DSN envelope ID with + or = characters", async () => {
+			mockReader.read
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode(
+						"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250-DSN\r\n250 AUTH=PLAIN LOGIN\r\n",
+					),
+				})
+				.mockResolvedValueOnce({
+					value: new TextEncoder().encode("235 Authentication successful\r\n"),
+				})
+
+			const mailer = await WorkerMailer.connect({
+				host: "smtp.example.com",
+				port: 587,
+				username: "user",
+				password: "pass",
+				authType: ["plain", "login"],
+				maxRetries: 0,
+			})
+
+			await expect(
+				mailer.send({
+					from: { email: "sender@example.com" },
+					to: [{ email: "legit@example.com" }],
+					subject: "test",
+					text: "test",
+					dsnOverride: { envelopeId: "id+injected=value" },
+				}),
+			).rejects.toThrow(SmtpCommandError)
+
+			await mailer.close()
+		})
 			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
 
 			mockReader.read
