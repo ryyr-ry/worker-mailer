@@ -68,6 +68,9 @@ function validateDomainPart(domain: string): ValidationResult | undefined {
 				reason: `Domain label "${label}" is too long (${label.length} chars, max ${MAX_LABEL_LENGTH})`,
 			}
 		}
+		if (label.startsWith("-") || label.endsWith("-")) {
+			return { valid: false, reason: `Domain label "${label}" starts or ends with a hyphen` }
+		}
 	}
 }
 

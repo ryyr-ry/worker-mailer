@@ -281,14 +281,20 @@ describe("validateEmail", () => {
 			expect(result.valid).toBe(true)
 		})
 
-		it("should accept domain label starting with hyphen (not checked by current validator)", () => {
+		it("should reject domain label starting with hyphen (RFC 952)", () => {
 			const result = validateEmail("user@-domain.com")
-			expect(result.valid).toBe(true)
+			expect(result.valid).toBe(false)
+			if (!result.valid) {
+				expect(result.reason).toContain("starts or ends with a hyphen")
+			}
 		})
 
-		it("should accept domain label ending with hyphen (not checked by current validator)", () => {
+		it("should reject domain label ending with hyphen (RFC 952)", () => {
 			const result = validateEmail("user@domain-.com")
-			expect(result.valid).toBe(true)
+			expect(result.valid).toBe(false)
+			if (!result.valid) {
+				expect(result.reason).toContain("starts or ends with a hyphen")
+			}
 		})
 	})
 
