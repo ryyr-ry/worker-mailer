@@ -110,6 +110,18 @@ function encodeQpByte(byte: number, isTrailingWhitespace: boolean): string {
 	return String.fromCharCode(byte)
 }
 
+function consumeNewline(bytes: Uint8Array, i: number): number {
+	if (bytes[i] === 0x0a) return 1
+	if (bytes[i] === 0x0d && i + 1 < bytes.length && bytes[i + 1] === 0x0a) return 2
+	return 0
+}
+
+function resolveQpEncoding(bytes: Uint8Array, i: number): string {
+	if (bytes[i] === 0x0d) return "=0D"
+	const isTrailing = i + 1 >= bytes.length || bytes[i + 1] === 0x0a || bytes[i + 1] === 0x0d
+	return encodeQpByte(bytes[i], isTrailing)
+}
+
 export function encodeQuotedPrintable(text: string, lineLength = 76): string {
 	const bytes = encode(text)
 	let result = ""
@@ -117,28 +129,14 @@ export function encodeQuotedPrintable(text: string, lineLength = 76): string {
 	let i = 0
 
 	while (i < bytes.length) {
-		const byte = bytes[i]
-		if (byte === 0x0a) {
+		const skip = consumeNewline(bytes, i)
+		if (skip > 0) {
 			result += "\r\n"
 			lineLen = 0
-			i++
+			i += skip
 			continue
 		}
-		if (byte === 0x0d) {
-			if (i + 1 < bytes.length && bytes[i + 1] === 0x0a) {
-				result += "\r\n"
-				lineLen = 0
-				i += 2
-				continue
-			}
-		}
-		const encoded =
-			byte === 0x0d
-				? "=0D"
-				: encodeQpByte(
-						byte,
-						i + 1 >= bytes.length || bytes[i + 1] === 0x0a || bytes[i + 1] === 0x0d,
-					)
+		const encoded = resolveQpEncoding(bytes, i)
 		const newLen = lineLen + encoded.length
 		if (newLen > lineLength || (newLen === lineLength && i + 1 < bytes.length)) {
 			result += "=\r\n"
