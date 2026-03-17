@@ -29,6 +29,12 @@ Built entirely on the [`cloudflare:sockets`](https://developers.cloudflare.com/w
 - 🔁 **Auto-reconnect & retries** — configurable retry and reconnection
 - 📊 **Structured results** — `SendResult` with detailed response info
 - 🧹 **Async disposal** — `Symbol.asyncDispose` / `await using` support
+- 🌐 **SMTPUTF8** — international email addresses (RFC 6531)
+- 🔗 **Reply threading** — `threadHeaders()` for In-Reply-To / References
+- 🎨 **Template engine** — Mustache-like `{{variable}}` rendering with HTML escaping
+- 📝 **HTML → Text** — automatic plain text generation from HTML
+- 🚫 **List-Unsubscribe** — RFC 8058 one-click unsubscribe headers
+- 🔨 **Mail builder** — fluent `MailBuilder` API with method chaining
 
 ## Requirements
 
@@ -779,6 +785,152 @@ type WorkerMailerOptions = {
 	dkim?: DkimOptions // DKIM signing configuration
 }
 ```
+
+## SMTPUTF8 (International Email Addresses)
+
+Send emails to/from internationalized addresses (e.g. `用户@例え.jp`) per RFC 6531. Enable with the `smtpUtf8` connection option — the mailer auto-detects server SMTPUTF8 capability via EHLO and adds the `SMTPUTF8` parameter to `MAIL FROM` when needed.
+
+```ts
+import { WorkerMailer } from "worker-mailer"
+
+const mailer = await WorkerMailer.connect({
+  host: "smtp.example.com",
+  port: 587,
+  username: "user@example.com",
+  password: "password",
+  smtpUtf8: true, // Enable SMTPUTF8 support
+})
+
+await mailer.send({
+  from: { name: "送信者", email: "用户@例え.jp" },
+  to: "受信者@example.com",
+  subject: "Hello",
+  text: "International email!",
+})
+```
+
+## Reply Thread Management
+
+Build proper `In-Reply-To` and `References` headers for email threading.
+
+```ts
+import { threadHeaders } from "worker-mailer/thread"
+
+const headers = threadHeaders({
+  inReplyTo: "<original-msg-id@example.com>",
+  references: "<root-msg-id@example.com>",
+})
+// { "In-Reply-To": "<original-msg-id@example.com>", References: "<root-msg-id@example.com> <original-msg-id@example.com>" }
+
+await mailer.send({
+  from: "sender@example.com",
+  to: "recipient@example.com",
+  subject: "Re: Discussion",
+  text: "Reply content",
+  headers,
+})
+```
+
+## List-Unsubscribe Headers
+
+Generate RFC 8058 one-click unsubscribe headers — required by Gmail and Yahoo since February 2024 for bulk senders.
+
+```ts
+import { unsubscribeHeaders } from "worker-mailer/unsubscribe"
+
+const headers = unsubscribeHeaders({
+  url: "https://example.com/unsubscribe?token=abc123",
+  mailto: "unsubscribe@example.com?subject=unsubscribe",
+})
+// { "List-Unsubscribe": "<https://example.com/unsubscribe?token=abc123>, <mailto:unsubscribe@example.com?subject=unsubscribe>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }
+
+await mailer.send({
+  from: "newsletter@example.com",
+  to: "subscriber@example.com",
+  subject: "Weekly Update",
+  html: "<p>Newsletter content</p>",
+  headers,
+})
+```
+
+## HTML to Plain Text
+
+Convert HTML emails to plain text automatically. Useful for generating the `text` part of multipart emails.
+
+```ts
+import { htmlToText } from "worker-mailer/html-to-text"
+
+const html = `<h1>Hello</h1><p>Check out <a href="https://example.com">our site</a>.</p>`
+
+// Default: 78-character word wrap, links preserved
+htmlToText(html)
+// "Hello\n\nCheck out our site (https://example.com)."
+
+// Strip link URLs from output
+htmlToText(html, { preserveLinks: false })
+// "Hello\n\nCheck out our site."
+
+// Custom word wrap width (or false to disable)
+htmlToText(html, { wordwrap: 40 })
+htmlToText(html, { wordwrap: false })
+```
+
+## Template Engine
+
+Mustache-like template engine with HTML auto-escaping. Supports variables, sections, and raw output.
+
+```ts
+import { render, compile } from "worker-mailer/template"
+
+// Simple variable substitution (HTML-escaped by default)
+render("Hello, {{name}}!", { name: "Alice" })
+// "Hello, Alice!"
+
+// Raw output with triple braces (no escaping)
+render("Hello, {{{html}}}!", { html: "<b>World</b>" })
+// "Hello, <b>World</b>!"
+
+// Sections — conditionally render blocks
+render("{{#premium}}Welcome, premium user!{{/premium}}", { premium: true })
+// "Welcome, premium user!"
+
+// Sections — iterate over arrays
+render("{{#items}}- {{name}}\n{{/items}}", { items: [{ name: "A" }, { name: "B" }] })
+// "- A\n- B\n"
+
+// Pre-compile for repeated use
+const template = compile("Hello, {{name}}!")
+template({ name: "Alice" }) // "Hello, Alice!"
+template({ name: "Bob" })   // "Hello, Bob!"
+```
+
+## Mail Builder API
+
+Fluent builder API with method chaining for constructing emails programmatically.
+
+```ts
+import { MailBuilder } from "worker-mailer/builder"
+
+const email = new MailBuilder()
+  .from("sender@example.com")
+  .to("recipient@example.com", "another@example.com")
+  .cc({ name: "CC User", email: "cc@example.com" })
+  .replyTo("replies@example.com")
+  .subject("Hello from MailBuilder")
+  .text("Plain text body")
+  .html("<p>HTML body</p>")
+  .header("X-Custom", "value")
+  .attach({
+    filename: "report.pdf",
+    content: pdfBuffer,
+    mimeType: "application/pdf",
+  })
+  .build()
+
+await mailer.send(email)
+```
+
+The `.build()` method returns an `EmailOptions` object compatible with `mailer.send()`. All setter methods return `this` for chaining.
 
 ## Limitations
 

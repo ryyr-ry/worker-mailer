@@ -28,6 +28,12 @@
 - 🔁 **自動リトライ・自動再接続** — 設定可能なリトライと再接続
 - 📊 **構造化された結果** — 詳細なレスポンス情報付き `SendResult`
 - 🧹 **非同期リソース管理** — `Symbol.asyncDispose` / `await using` サポート
+- 🌐 **SMTPUTF8** — 国際化メールアドレス対応（RFC 6531）
+- 🔗 **返信スレッド管理** — `threadHeaders()` による In-Reply-To / References 自動構築
+- 🎨 **テンプレートエンジン** — Mustache風の `{{変数}}` レンダリング（HTMLエスケープ付き）
+- 📝 **HTML → テキスト変換** — HTMLメールからプレーンテキストを自動生成
+- 🚫 **List-Unsubscribe** — RFC 8058 ワンクリック配信停止ヘッダー
+- 🔨 **メールビルダー** — メソッドチェーン式の `MailBuilder` API
 
 ## 動作要件
 
@@ -896,6 +902,152 @@ type ValidationResult =
 	| { valid: true }
 	| { valid: false; reason: string }
 ```
+
+## SMTPUTF8（国際化メールアドレス）
+
+RFC 6531 に基づき、国際化されたメールアドレス（例: `田中@メール.jp`）でメールを送受信できます。`smtpUtf8` 接続オプションを有効にすると、EHLOでサーバーのSMTPUTF8対応を自動検出し、必要に応じて `MAIL FROM` に `SMTPUTF8` パラメータを付与します。
+
+```ts
+import { WorkerMailer } from "worker-mailer"
+
+const mailer = await WorkerMailer.connect({
+  host: "smtp.example.com",
+  port: 587,
+  username: "user@example.com",
+  password: "password",
+  smtpUtf8: true, // SMTPUTF8サポートを有効化
+})
+
+await mailer.send({
+  from: { name: "送信者", email: "田中@メール.jp" },
+  to: "受信者@example.com",
+  subject: "国際化メール",
+  text: "UTF-8アドレスからの送信です！",
+})
+```
+
+## 返信スレッド管理
+
+メールクライアントで正しくスレッド表示されるよう、`In-Reply-To` と `References` ヘッダーを構築します。
+
+```ts
+import { threadHeaders } from "worker-mailer/thread"
+
+const headers = threadHeaders({
+  inReplyTo: "<original-msg-id@example.com>",
+  references: "<root-msg-id@example.com>",
+})
+// { "In-Reply-To": "<original-msg-id@example.com>", References: "<root-msg-id@example.com> <original-msg-id@example.com>" }
+
+await mailer.send({
+  from: "sender@example.com",
+  to: "recipient@example.com",
+  subject: "Re: ディスカッション",
+  text: "返信内容",
+  headers,
+})
+```
+
+## List-Unsubscribe ヘッダー
+
+RFC 8058 準拠のワンクリック配信停止ヘッダーを生成します。2024年2月以降、Gmail・Yahoo は大量送信者に対してこのヘッダーを義務化しています。
+
+```ts
+import { unsubscribeHeaders } from "worker-mailer/unsubscribe"
+
+const headers = unsubscribeHeaders({
+  url: "https://example.com/unsubscribe?token=abc123",
+  mailto: "unsubscribe@example.com?subject=unsubscribe",
+})
+// { "List-Unsubscribe": "<https://...>, <mailto:...>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }
+
+await mailer.send({
+  from: "newsletter@example.com",
+  to: "subscriber@example.com",
+  subject: "週刊ニュース",
+  html: "<p>ニュースレター</p>",
+  headers,
+})
+```
+
+## HTML → テキスト変換
+
+HTMLメールからプレーンテキストを自動生成します。multipartメールの `text` パート作成に便利です。
+
+```ts
+import { htmlToText } from "worker-mailer/html-to-text"
+
+const html = `<h1>こんにちは</h1><p><a href="https://example.com">サイト</a>をご覧ください。</p>`
+
+// デフォルト: 78文字折り返し、リンクURL保持
+htmlToText(html)
+// "こんにちは\n\nサイト (https://example.com) をご覧ください。"
+
+// リンクURLを除去
+htmlToText(html, { preserveLinks: false })
+// "こんにちは\n\nサイトをご覧ください。"
+
+// 折り返し幅をカスタマイズ（falseで無効）
+htmlToText(html, { wordwrap: 40 })
+htmlToText(html, { wordwrap: false })
+```
+
+## テンプレートエンジン
+
+Mustache風のテンプレートエンジンです。HTMLの自動エスケープ、変数展開、セクション（条件/ループ）をサポートします。
+
+```ts
+import { render, compile } from "worker-mailer/template"
+
+// 変数展開（デフォルトでHTMLエスケープ）
+render("こんにちは、{{name}}さん！", { name: "太郎" })
+// "こんにちは、太郎さん！"
+
+// トリプルブレースでエスケープなし
+render("内容: {{{html}}}", { html: "<b>太字</b>" })
+// "内容: <b>太字</b>"
+
+// セクション — 条件分岐
+render("{{#premium}}プレミアム会員です{{/premium}}", { premium: true })
+// "プレミアム会員です"
+
+// セクション — 配列ループ
+render("{{#items}}- {{name}}\n{{/items}}", { items: [{ name: "A" }, { name: "B" }] })
+// "- A\n- B\n"
+
+// プリコンパイルで繰り返し使用
+const template = compile("{{name}}様、ご注文ありがとうございます。")
+template({ name: "田中" }) // "田中様、ご注文ありがとうございます。"
+template({ name: "佐藤" }) // "佐藤様、ご注文ありがとうございます。"
+```
+
+## メールビルダーAPI
+
+メソッドチェーンでメールを組み立てるビルダーAPIです。
+
+```ts
+import { MailBuilder } from "worker-mailer/builder"
+
+const email = new MailBuilder()
+  .from("sender@example.com")
+  .to("recipient@example.com", "another@example.com")
+  .cc({ name: "CCユーザー", email: "cc@example.com" })
+  .replyTo("replies@example.com")
+  .subject("MailBuilderからの送信")
+  .text("プレーンテキスト本文")
+  .html("<p>HTML本文</p>")
+  .header("X-Custom", "value")
+  .attach({
+    filename: "report.pdf",
+    content: pdfBuffer,
+    mimeType: "application/pdf",
+  })
+  .build()
+
+await mailer.send(email)
+```
+
+`.build()` は `mailer.send()` に渡せる `EmailOptions` オブジェクトを返します。すべてのセッターメソッドは `this` を返すためチェーン可能です。
 
 ## 制限事項
 
