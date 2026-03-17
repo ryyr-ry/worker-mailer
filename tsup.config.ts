@@ -13,6 +13,7 @@ export default defineConfig({
 		preview: "./src/preview.ts",
 		thread: "./src/thread.ts",
 		unsubscribe: "./src/unsubscribe.ts",
+		"html-to-text": "./src/html-to-text.ts",
 	},
 	dts: true,
 	shims: true,

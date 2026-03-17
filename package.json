@@ -54,6 +54,11 @@
 			"types": "./dist/unsubscribe.d.ts",
 			"import": "./dist/unsubscribe.mjs",
 			"require": "./dist/unsubscribe.js"
+		},
+		"./html-to-text": {
+			"types": "./dist/html-to-text.d.ts",
+			"import": "./dist/html-to-text.mjs",
+			"require": "./dist/html-to-text.js"
 		}
 	},
 	"keywords": [
