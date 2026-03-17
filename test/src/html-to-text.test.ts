@@ -218,4 +218,18 @@ describe("htmlToText", () => {
 			expect(result).toBe("Nested bold text")
 		})
 	})
+
+	describe("HTML entity decoding for non-BMP characters", () => {
+		it("should decode decimal emoji entities correctly", () => {
+			const html = "<p>&#128512;</p>"
+			const result = htmlToText(html, { wordwrap: false })
+			expect(result).toBe("😀")
+		})
+
+		it("should decode hex emoji entities correctly", () => {
+			const html = "<p>&#x1F600;</p>"
+			const result = htmlToText(html, { wordwrap: false })
+			expect(result).toBe("😀")
+		})
+	})
 })

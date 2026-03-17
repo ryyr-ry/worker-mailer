@@ -46,12 +46,16 @@ export function encodeHeader(text: string): string {
 		}
 
 		const isUtf8LeadByte = (byte & 0xc0) !== 0x80
-		if (current.length + fragment.length > maxPayload && isUtf8LeadByte) {
-			words.push(`${prefix}${current}${suffix}`)
-			current = fragment
-		} else {
-			current += fragment
+		if (isUtf8LeadByte && current.length > 0) {
+			const contBytes = byte >= 0xf0 ? 3 : byte >= 0xe0 ? 2 : byte >= 0xc0 ? 1 : 0
+			const charEncodedLen = fragment.length + contBytes * 3
+			if (current.length + charEncodedLen > maxPayload) {
+				words.push(`${prefix}${current}${suffix}`)
+				current = fragment
+				continue
+			}
 		}
+		current += fragment
 	}
 	if (current.length > 0) {
 		words.push(`${prefix}${current}${suffix}`)

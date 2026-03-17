@@ -142,9 +142,9 @@ function buildContentBody(params: MimeMessageParams): string {
 	const calPart = hasCal ? buildCalendarPart(calendarEvent) : ""
 	const related = hasInline ? buildMultipart("related", [htmlPart, ...inlines]) : htmlPart
 	const htmlOrRelated = hasInline ? related : htmlPart
-	if (!hasHtml && !hasAttach && hasText) return textPart
-	if (!hasText && hasHtml && !hasAttach && !hasInline) return htmlPart
-	if (!hasText && hasHtml && hasInline && !hasAttach) return related
+	if (!hasHtml && !hasAttach && !hasCal && hasText) return textPart
+	if (!hasText && hasHtml && !hasAttach && !hasInline && !hasCal) return htmlPart
+	if (!hasText && hasHtml && hasInline && !hasAttach && !hasCal) return related
 	return buildWithAttachAndCal({
 		hasText,
 		hasHtml,
@@ -178,18 +178,35 @@ function buildWithAttachAndCal(ctx: ContentBuildContext): string {
 	if (ctx.hasText && ctx.hasHtml && !ctx.hasAttach) {
 		return buildMultipart("alternative", altParts)
 	}
-	if (ctx.hasText && !ctx.hasHtml && ctx.hasAttach) {
+	if (ctx.hasText && !ctx.hasHtml && ctx.hasAttach && !ctx.hasCal) {
 		return buildMultipart("mixed", [ctx.textPart, ...ctx.attaches])
 	}
+	if (ctx.hasText && !ctx.hasHtml && ctx.hasAttach && ctx.hasCal) {
+		const alt = buildMultipart("alternative", [ctx.textPart, ctx.calPart])
+		return buildMultipart("mixed", [alt, ...ctx.attaches])
+	}
+	if (ctx.hasText && !ctx.hasHtml && !ctx.hasAttach && ctx.hasCal) {
+		return buildMultipart("alternative", [ctx.textPart, ctx.calPart])
+	}
 	if (!ctx.hasText && ctx.hasHtml && !ctx.hasInline && ctx.hasAttach) {
-		return buildMultipart("mixed", [ctx.htmlPart, ...ctx.attaches])
+		const base = ctx.hasCal
+			? buildMultipart("alternative", [ctx.htmlPart, ctx.calPart])
+			: ctx.htmlPart
+		return buildMultipart("mixed", [base, ...ctx.attaches])
 	}
 	if (!ctx.hasText && ctx.hasHtml && ctx.hasInline && ctx.hasAttach) {
-		return buildMultipart("mixed", [ctx.htmlOrRelated, ...ctx.attaches])
+		const base = ctx.hasCal
+			? buildMultipart("alternative", [ctx.htmlOrRelated, ctx.calPart])
+			: ctx.htmlOrRelated
+		return buildMultipart("mixed", [base, ...ctx.attaches])
 	}
 	if (ctx.hasText && ctx.hasHtml && ctx.hasAttach) {
 		const alt = buildMultipart("alternative", altParts)
 		return buildMultipart("mixed", [alt, ...ctx.attaches])
+	}
+	if (!ctx.hasText && ctx.hasHtml && !ctx.hasAttach && ctx.hasCal) {
+		const htmlContent = ctx.hasInline ? ctx.htmlOrRelated : ctx.htmlPart
+		return buildMultipart("alternative", [htmlContent, ctx.calPart])
 	}
 	if (ctx.hasText) return ctx.textPart
 	if (ctx.hasHtml) return ctx.htmlPart
@@ -199,7 +216,7 @@ function buildWithAttachAndCal(ctx: ContentBuildContext): string {
 function buildAltParts(ctx: ContentBuildContext): string[] {
 	const parts: string[] = []
 	if (ctx.hasText) parts.push(ctx.textPart)
-	parts.push(ctx.hasInline ? ctx.htmlOrRelated : ctx.htmlPart)
+	if (ctx.hasHtml) parts.push(ctx.hasInline ? ctx.htmlOrRelated : ctx.htmlPart)
 	if (ctx.hasCal) parts.push(ctx.calPart)
 	return parts
 }

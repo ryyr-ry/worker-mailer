@@ -107,9 +107,9 @@ function decodeEntities(text: string): string {
 	for (const [entity, char] of Object.entries(entities)) {
 		result = result.replaceAll(entity, char)
 	}
-	result = result.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+	result = result.replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
 	result = result.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) =>
-		String.fromCharCode(Number.parseInt(hex, 16)),
+		String.fromCodePoint(Number.parseInt(hex, 16)),
 	)
 	return result
 }

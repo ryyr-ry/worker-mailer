@@ -187,6 +187,12 @@ export class WorkerMailer implements Mailer {
 		)
 		if (!this.active || e instanceof CrlfInjectionError || e instanceof ConfigurationError) {
 			this.emailSending.setSentError(e)
+			try {
+				const error = e instanceof Error ? e : new Error(String(e))
+				await this.hooks?.onSendError?.(this.emailSending.options, error)
+			} catch (hookErr) {
+				this.logger.error("[WorkerMailer] onSendError hook error", hookErr)
+			}
 			return true
 		}
 		try {

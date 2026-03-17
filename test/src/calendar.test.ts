@@ -288,4 +288,39 @@ describe("Calendar invites", () => {
 			expect(raw).toContain('text/calendar; charset="UTF-8"; method=REQUEST')
 		})
 	})
+
+	describe("Security: CRLF injection in email addresses", () => {
+		it("should sanitize CRLF in organizer email", () => {
+			const result = createCalendarEvent(
+				baseOptions({
+					organizer: { name: "Evil", email: "evil@test.com\r\nX-Injected: true" },
+				}),
+			)
+			// CRLF is stripped, so the injection attempt becomes part of the email string
+			// The key is that it does NOT appear as a separate iCal property line
+			const lines = result.content.split("\r\n")
+			const injectedLine = lines.find((l) => l.startsWith("X-Injected"))
+			expect(injectedLine).toBeUndefined()
+		})
+
+		it("should sanitize CRLF in attendee email", () => {
+			const result = createCalendarEvent(
+				baseOptions({
+					attendees: [{ email: "att@test.com\r\nX-Bad: yes", rsvp: true }],
+				}),
+			)
+			const lines = result.content.split("\r\n")
+			const injectedLine = lines.find((l) => l.startsWith("X-Bad"))
+			expect(injectedLine).toBeUndefined()
+		})
+
+		it("should sanitize LF-only injection in organizer email", () => {
+			const result = createCalendarEvent(
+				baseOptions({
+					organizer: { email: "org@test.com\nINJECTED:value" },
+				}),
+			)
+			expect(result.content).not.toContain("\nINJECTED:value")
+		})
+	})
 })

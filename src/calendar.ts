@@ -60,11 +60,16 @@ function validateCalendarOptions(options: CalendarEventOptions): void {
 	}
 }
 
+function sanitizeEmail(email: string): string {
+	return email.replace(/[\r\n]/g, "")
+}
+
 function appendOrganizer(lines: string[], organizer: { name?: string; email: string }): void {
+	const email = sanitizeEmail(organizer.email)
 	if (organizer.name) {
-		lines.push(`ORGANIZER;CN=${escapeIcalText(organizer.name)}:mailto:${organizer.email}`)
+		lines.push(`ORGANIZER;CN=${escapeIcalText(organizer.name)}:mailto:${email}`)
 	} else {
-		lines.push(`ORGANIZER:mailto:${organizer.email}`)
+		lines.push(`ORGANIZER:mailto:${email}`)
 	}
 }
 
@@ -76,7 +81,8 @@ function appendAttendees(
 	for (const att of attendees) {
 		const rsvp = att.rsvp !== false ? "TRUE" : "FALSE"
 		const cn = att.name ? `;CN=${escapeIcalText(att.name)}` : ""
-		lines.push(`ATTENDEE;ROLE=REQ-PARTICIPANT;RSVP=${rsvp}${cn}:mailto:${att.email}`)
+		const email = sanitizeEmail(att.email)
+		lines.push(`ATTENDEE;ROLE=REQ-PARTICIPANT;RSVP=${rsvp}${cn}:mailto:${email}`)
 	}
 }
 

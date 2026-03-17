@@ -980,6 +980,57 @@ describe("Email", () => {
 			}
 		})
 
+		it("should include calendar event with text-only email", () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Meeting",
+				text: "Join the meeting",
+				calendarEvent: {
+					content: "BEGIN:VCALENDAR\r\nEND:VCALENDAR",
+					method: "REQUEST",
+				},
+			})
+			const raw = email.getRawMessage()
+			expect(raw).toContain("text/calendar")
+			expect(raw).toContain("text/plain")
+			expect(raw).toContain("multipart/alternative")
+		})
+
+		it("should include calendar event with html-only email", () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Meeting",
+				html: "<p>Join the meeting</p>",
+				calendarEvent: {
+					content: "BEGIN:VCALENDAR\r\nEND:VCALENDAR",
+					method: "REQUEST",
+				},
+			})
+			const raw = email.getRawMessage()
+			expect(raw).toContain("text/calendar")
+			expect(raw).toContain("text/html")
+		})
+
+		it("should include calendar event with text + attachments", () => {
+			const email = new Email({
+				from: "sender@example.com",
+				to: "recipient@example.com",
+				subject: "Meeting",
+				text: "Join the meeting",
+				calendarEvent: {
+					content: "BEGIN:VCALENDAR\r\nEND:VCALENDAR",
+					method: "REQUEST",
+				},
+				attachments: [{ filename: "doc.pdf", content: "base64data" }],
+			})
+			const raw = email.getRawMessage()
+			expect(raw).toContain("text/calendar")
+			expect(raw).toContain("text/plain")
+			expect(raw).toContain("multipart/mixed")
+		})
+
 		it("should encode Uint8Array attachment content to base64 in email data", () => {
 			const binaryContent = new Uint8Array([72, 101, 108, 108, 111])
 			const email = new Email({
