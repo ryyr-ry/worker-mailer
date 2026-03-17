@@ -11,6 +11,7 @@ export default defineConfig({
 		dkim: "./src/dkim.ts",
 		batch: "./src/batch.ts",
 		preview: "./src/preview.ts",
+		thread: "./src/thread.ts",
 	},
 	dts: true,
 	shims: true,

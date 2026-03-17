@@ -44,6 +44,11 @@
 			"types": "./dist/preview.d.ts",
 			"import": "./dist/preview.mjs",
 			"require": "./dist/preview.js"
+		},
+		"./thread": {
+			"types": "./dist/thread.d.ts",
+			"import": "./dist/thread.mjs",
+			"require": "./dist/thread.js"
 		}
 	},
 	"keywords": [
