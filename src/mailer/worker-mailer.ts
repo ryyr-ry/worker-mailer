@@ -7,7 +7,7 @@ import { ConfigurationError, CrlfInjectionError, SmtpConnectionError } from "../
 import Logger from "../logger"
 import type { SendResult } from "../result"
 import { BlockingQueue, backoff } from "../utils"
-import { dataCommand, mailFrom, noop, rcptTo, rset, sendBody } from "./commands"
+import { dataCommand, hasNonAscii, mailFrom, noop, rcptTo, rset, sendBody } from "./commands"
 import { inferSecurity, validatePortSecurity } from "./config"
 import { initializeSession } from "./session"
 import { SmtpTransport } from "./transport"
@@ -148,7 +148,14 @@ export class WorkerMailer implements Mailer {
 		const startTime = Date.now()
 		const email = this.emailSending
 		const allRecipients = [...(email.to ?? []), ...(email.cc ?? []), ...(email.bcc ?? [])]
-		await mailFrom({ ...this.dsnCtx, fromEmail: email.from.email, dsnOverride: email.dsnOverride })
+		const needsUtf8 = hasNonAscii(email.from.email) ||
+			allRecipients.some((r) => hasNonAscii(r.email))
+		await mailFrom({
+			...this.dsnCtx,
+			fromEmail: email.from.email,
+			dsnOverride: email.dsnOverride,
+			smtpUtf8: needsUtf8,
+		})
 		await rcptTo({ ...this.dsnCtx, recipients: allRecipients, dsnOverride: email.dsnOverride })
 		await dataCommand(this.transport)
 		let rawMessage = email.getRawMessage()

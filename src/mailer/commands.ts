@@ -11,6 +11,7 @@ interface MailFromParams {
 	capabilities: SmtpCapabilities
 	dsnGlobal?: DsnParam
 	dsnOverride?: DsnOptions
+	smtpUtf8?: boolean
 }
 
 export async function mailFrom({
@@ -19,8 +20,12 @@ export async function mailFrom({
 	capabilities,
 	dsnGlobal,
 	dsnOverride,
+	smtpUtf8,
 }: MailFromParams): Promise<void> {
 	let message = `MAIL FROM: <${fromEmail}>`
+	if (smtpUtf8 && capabilities.supportsSmtpUtf8) {
+		message += " SMTPUTF8"
+	}
 	if (capabilities.supportsDSN) {
 		message += ` ${buildRet(dsnGlobal, dsnOverride)}`
 		if (dsnOverride?.envelopeId) {
@@ -126,4 +131,12 @@ export function buildRet(dsnGlobal?: DsnParam, dsnOverride?: DsnOptions): string
 	if (ret.FULL) return "RET=FULL"
 	if (ret.HEADERS) return "RET=HDRS"
 	return ""
+}
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ASCII range check
+const NON_ASCII_PATTERN = /[^\x00-\x7F]/
+
+/** メールアドレスに非ASCII文字が含まれるか判定する */
+export function hasNonAscii(value: string): boolean {
+	return NON_ASCII_PATTERN.test(value)
 }

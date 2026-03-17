@@ -61,6 +61,7 @@ export type SmtpCapabilities = {
 	allowAuth: boolean
 	authTypeSupported: AuthType[]
 	supportsStartTls: boolean
+	supportsSmtpUtf8: boolean
 }
 
 export const emptyCapabilities: SmtpCapabilities = {
@@ -68,4 +69,5 @@ export const emptyCapabilities: SmtpCapabilities = {
 	allowAuth: false,
 	authTypeSupported: [],
 	supportsStartTls: false,
+	supportsSmtpUtf8: false,
 }

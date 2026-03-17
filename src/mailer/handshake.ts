@@ -17,6 +17,7 @@ export function parseCapabilities(response: string): SmtpCapabilities {
 		allowAuth: false,
 		authTypeSupported: [],
 		supportsStartTls: false,
+		supportsSmtpUtf8: false,
 	}
 
 	if (/[ -]AUTH\b/i.test(response)) {
@@ -37,6 +38,9 @@ export function parseCapabilities(response: string): SmtpCapabilities {
 	if (/[ -]DSN\b/i.test(response)) {
 		capabilities.supportsDSN = true
 	}
+	if (/[ -]SMTPUTF8\b/i.test(response)) {
+		capabilities.supportsSmtpUtf8 = true
+	}
 
 	return capabilities
 }
@@ -54,6 +58,7 @@ export async function ehlo(transport: SmtpTransport, hostname: string): Promise<
 			allowAuth: false,
 			authTypeSupported: [],
 			supportsStartTls: false,
+			supportsSmtpUtf8: false,
 		}
 	}
 	return parseCapabilities(response)
