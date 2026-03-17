@@ -49,6 +49,7 @@ function convertBlockElements(html: string): string {
 	text = text.replace(/<\/div>/gi, "\n")
 	text = text.replace(/<\/h[1-6]>/gi, "\n\n")
 	text = text.replace(/<h[1-6][^>]*>/gi, "\n")
+	text = text.replace(/<\/td>/gi, " ")
 	text = text.replace(/<\/tr>/gi, "\n")
 	text = text.replace(/<\/blockquote>/gi, "\n")
 	text = text.replace(/<\/pre>/gi, "\n")

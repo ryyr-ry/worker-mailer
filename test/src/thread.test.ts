@@ -107,6 +107,23 @@ describe("threadHeaders", () => {
 				}),
 			).toThrow("References must not contain CRLF")
 		})
+
+		it("空文字のReferencesを無視して初回返信として扱う", () => {
+			const result = threadHeaders({
+				inReplyTo: "<msg@example.com>",
+				references: "",
+			})
+			expect(result.References).toBe("<msg@example.com>")
+		})
+
+		it("空白のみのReferencesでエラーを投げる", () => {
+			expect(() =>
+				threadHeaders({
+					inReplyTo: "<valid@example.com>",
+					references: "   ",
+				}),
+			).toThrow("Invalid Message-ID in References")
+		})
 	})
 
 	describe("RFC 5322準拠", () => {
@@ -125,11 +142,16 @@ describe("threadHeaders", () => {
 			expect(result.References).toBe(`${refs} <f@x.com>`)
 		})
 
-		it("返り値の型が正しい", () => {
-			const result = threadHeaders({ inReplyTo: "<test@example.com>" })
-			expect(result).toHaveProperty("In-Reply-To")
-			expect(result).toHaveProperty("References")
-			expect(Object.keys(result)).toHaveLength(2)
+		it("@がないMessage-IDを拒否する", () => {
+			expect(() => threadHeaders({ inReplyTo: "<noatsign>" })).toThrow(
+				"Invalid Message-ID format",
+			)
+		})
+
+		it("@のみのMessage-IDを拒否する", () => {
+			expect(() => threadHeaders({ inReplyTo: "<@>" })).toThrow(
+				"Invalid Message-ID format",
+			)
 		})
 	})
 })

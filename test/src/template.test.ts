@@ -52,6 +52,13 @@ describe("render", () => {
 		it("{{{変数}}}はエスケープされない", () => {
 			expect(render("{{{html}}}", { html: "<b>bold</b>" })).toBe("<b>bold</b>")
 		})
+
+		it("セクション内の変数もHTMLエスケープされる", () => {
+			const data = { items: [{ name: "<script>alert(1)</script>" }] }
+			expect(render("{{#items}}{{name}}{{/items}}", data)).toBe(
+				"&lt;script&gt;alert(1)&lt;/script&gt;",
+			)
+		})
 	})
 
 	describe("ドットパス解決", () => {
@@ -157,9 +164,34 @@ describe("render", () => {
 			expect(render("Hello {{ world", {})).toBe("Hello {{ world")
 		})
 
+		it("閉じタグのないセクションを残りテキストとして処理する", () => {
+			const result = render("{{#show}}never closed", { show: true })
+			expect(result).toBe("never closed")
+		})
+
+		it("空のセクションを空文字列で返す", () => {
+			expect(render("{{#show}}{{/show}}", { show: true })).toBe("")
+		})
+
 		it("ネストしたセクションを処理する", () => {
 			const data = { a: true, b: true }
 			expect(render("{{#a}}{{#b}}OK{{/b}}{{/a}}", data)).toBe("OK")
+		})
+
+		it("__proto__キーへのアクセスをブロックする", () => {
+			expect(render("{{__proto__}}", {})).toBe("")
+		})
+
+		it("constructorキーへのアクセスをブロックする", () => {
+			expect(render("{{constructor}}", {})).toBe("")
+		})
+
+		it("prototypeキーへのアクセスをブロックする", () => {
+			expect(render("{{a.prototype.b}}", { a: {} })).toBe("")
+		})
+
+		it("ドットパス経由の__proto__アクセスをブロックする", () => {
+			expect(render("{{a.__proto__.polluted}}", { a: {} })).toBe("")
 		})
 	})
 })

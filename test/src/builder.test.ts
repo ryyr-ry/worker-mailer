@@ -34,6 +34,20 @@ describe("MailBuilder", () => {
 				.build()
 			expect(email.html).toBe("<h1>Hello</h1>")
 		})
+
+		it("build()の返り値は独立したオブジェクトである", () => {
+			const builder = new MailBuilder()
+				.from("a@x.com")
+				.to("b@x.com")
+				.subject("S")
+
+			const email1 = builder.build()
+			builder.text("Hello")
+			const email2 = builder.build()
+
+			expect(email1.text).toBeUndefined()
+			expect(email2.text).toBe("Hello")
+		})
 	})
 
 	describe("メソッドチェーン", () => {
@@ -120,6 +134,16 @@ describe("MailBuilder", () => {
 				.subject("S")
 				.build()
 			expect(email.to).toBe("b@x.com")
+		})
+
+		it("to()の複数回呼び出しで上書きする", () => {
+			const email = new MailBuilder()
+				.from("a@x.com")
+				.to("first@x.com")
+				.to("second@x.com")
+				.subject("S")
+				.build()
+			expect(email.to).toBe("second@x.com")
 		})
 	})
 

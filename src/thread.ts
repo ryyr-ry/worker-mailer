@@ -15,7 +15,7 @@ export type ThreadHeaders = {
 	References: string
 }
 
-const MSG_ID_PATTERN = /^<[^>\r\n]+>$/
+const MSG_ID_PATTERN = /^<[^>\r\n]+@[^>\r\n]+>$/
 
 function validateMessageId(id: string): void {
 	const trimmed = id.trim()

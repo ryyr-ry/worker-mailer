@@ -141,6 +141,8 @@ function renderSection(token: CompiledToken & { type: "section" }, data: Templat
 	return isTruthy ? renderTokens(token.body, data) : ""
 }
 
+const DANGEROUS_KEYS = new Set(["constructor", "__proto__", "prototype"])
+
 function resolveValue(key: string, data: TemplateData): unknown {
 	if (key === ".") return data["."]
 	const parts = key.split(".")
@@ -148,6 +150,7 @@ function resolveValue(key: string, data: TemplateData): unknown {
 	for (const part of parts) {
 		if (current === null || current === undefined) return undefined
 		if (typeof current !== "object") return undefined
+		if (DANGEROUS_KEYS.has(part)) return undefined
 		current = (current as Record<string, unknown>)[part]
 	}
 	return current

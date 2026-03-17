@@ -1,6 +1,28 @@
 import { describe, expect, it } from "vitest"
 import { parseCapabilities } from "../../src/mailer/handshake"
-import { hasNonAscii } from "../../src/mailer/commands"
+import { hasNonAscii, mailFrom } from "../../src/mailer/commands"
+import type { SmtpTransport } from "../../src/mailer/transport"
+import type { SmtpCapabilities } from "../../src/mailer/types"
+
+function createMockTransport(): { transport: SmtpTransport; commands: string[] } {
+	const commands: string[] = []
+	const transport = {
+		writeLine: async (msg: string) => { commands.push(msg) },
+		readTimeout: async () => "250 OK",
+	} as unknown as SmtpTransport
+	return { transport, commands }
+}
+
+function createCapabilities(overrides?: Partial<SmtpCapabilities>): SmtpCapabilities {
+	return {
+		supportsDSN: false,
+		allowAuth: false,
+		authTypeSupported: [],
+		supportsStartTls: false,
+		supportsSmtpUtf8: false,
+		...overrides,
+	}
+}
 
 describe("SMTPUTF8", () => {
 	describe("parseCapabilities", () => {
@@ -31,6 +53,18 @@ describe("SMTPUTF8", () => {
 			expect(caps.supportsDSN).toBe(true)
 			expect(caps.allowAuth).toBe(true)
 		})
+
+		it("XSMTPUTFのような類似拡張に誤マッチしない", () => {
+			const response = "250-mail.example.com\r\n250-XSMTPUTF8\r\n250 OK"
+			const caps = parseCapabilities(response)
+			expect(caps.supportsSmtpUtf8).toBe(false)
+		})
+
+		it("SMTPUTF8_EXTENDEDのような類似拡張に誤マッチしない", () => {
+			const response = "250-mail.example.com\r\n250-SMTPUTF8_EXTENDED\r\n250 OK"
+			const caps = parseCapabilities(response)
+			expect(caps.supportsSmtpUtf8).toBe(false)
+		})
 	})
 
 	describe("hasNonAscii", () => {
@@ -60,6 +94,50 @@ describe("SMTPUTF8", () => {
 
 		it("絵文字でtrueを返す", () => {
 			expect(hasNonAscii("😀@example.com")).toBe(true)
+		})
+	})
+
+	describe("mailFromのSMTPUTF8統合", () => {
+		it("SMTPUTF8対応サーバーでSMTPUTF8パラメータを付与する", async () => {
+			const { transport, commands } = createMockTransport()
+			const caps = createCapabilities({ supportsSmtpUtf8: true })
+
+			await mailFrom({
+				transport,
+				fromEmail: "田中@example.com",
+				capabilities: caps,
+				smtpUtf8: true,
+			})
+
+			expect(commands[0]).toBe("MAIL FROM: <田中@example.com> SMTPUTF8")
+		})
+
+		it("SMTPUTF8非対応サーバーではパラメータを付与しない", async () => {
+			const { transport, commands } = createMockTransport()
+			const caps = createCapabilities({ supportsSmtpUtf8: false })
+
+			await mailFrom({
+				transport,
+				fromEmail: "田中@example.com",
+				capabilities: caps,
+				smtpUtf8: true,
+			})
+
+			expect(commands[0]).toBe("MAIL FROM: <田中@example.com>")
+		})
+
+		it("smtpUtf8フラグがfalseの場合パラメータを付与しない", async () => {
+			const { transport, commands } = createMockTransport()
+			const caps = createCapabilities({ supportsSmtpUtf8: true })
+
+			await mailFrom({
+				transport,
+				fromEmail: "user@example.com",
+				capabilities: caps,
+				smtpUtf8: false,
+			})
+
+			expect(commands[0]).toBe("MAIL FROM: <user@example.com>")
 		})
 	})
 })

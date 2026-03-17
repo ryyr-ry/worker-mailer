@@ -106,6 +106,6 @@ export class MailBuilder {
 		if (!this.opts.subject) {
 			throw new Error("subject is required")
 		}
-		return this.opts as EmailOptions
+		return { ...this.opts } as EmailOptions
 	}
 }

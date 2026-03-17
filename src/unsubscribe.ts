@@ -6,7 +6,7 @@
 import { CrlfInjectionError } from "./errors"
 
 export type UnsubscribeOptions = {
-	/** 配信停止URL（HTTPSを推奨） */
+	/** 配信停止URL（HTTPS必須、RFC 8058） */
 	url: string
 	/** mailto:アドレス（オプション） */
 	mailto?: string
@@ -21,10 +21,14 @@ function validateUrl(url: string): void {
 	if (/[\r\n]/.test(url)) {
 		throw new CrlfInjectionError("List-Unsubscribe URL")
 	}
+	let parsed: URL
 	try {
-		new URL(url)
+		parsed = new URL(url)
 	} catch {
 		throw new Error(`Invalid URL: "${url}"`)
+	}
+	if (parsed.protocol !== "https:") {
+		throw new Error("List-Unsubscribe URL must use HTTPS (RFC 8058)")
 	}
 }
 

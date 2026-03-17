@@ -35,8 +35,7 @@ describe("htmlToText", () => {
 
 		it("<h1>-<h6>を見出しに変換する", () => {
 			const result = htmlToText("<h1>Title</h1><p>Content</p>")
-			expect(result).toContain("Title")
-			expect(result).toContain("Content")
+			expect(result).toBe("Title\n\nContent")
 		})
 	})
 
@@ -157,12 +156,13 @@ describe("htmlToText", () => {
 
 	describe("行折り返し", () => {
 		it("デフォルトで78文字で折り返す", () => {
-			const long = "A".repeat(100)
-			const result = htmlToText(long)
+			const words = Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ")
+			const result = htmlToText(words)
 			const lines = result.split("\n")
 			for (const line of lines) {
-				expect(line.length).toBeLessThanOrEqual(100)
+				expect(line.length).toBeLessThanOrEqual(78)
 			}
+			expect(lines.length).toBeGreaterThan(1)
 		})
 
 		it("wordwrapオプションで折り返し幅を指定できる", () => {
@@ -211,8 +211,13 @@ describe("htmlToText", () => {
 		it("テーブルを含むHTMLを処理する", () => {
 			const html = "<table><tr><td>Cell 1</td><td>Cell 2</td></tr></table>"
 			const result = htmlToText(html)
-			expect(result).toContain("Cell 1")
-			expect(result).toContain("Cell 2")
+			expect(result).toBe("Cell 1 Cell 2")
+		})
+
+		it("ネストしたHTML構造を正しく変換する", () => {
+			const html = "<div><p>Nested <b>bold</b> text</p></div>"
+			const result = htmlToText(html)
+			expect(result).toBe("Nested bold text")
 		})
 	})
 })

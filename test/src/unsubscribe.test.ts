@@ -78,6 +78,24 @@ describe("unsubscribeHeaders", () => {
 			)
 		})
 
+		it("HTTP URLを拒否する（RFC 8058はHTTPS必須）", () => {
+			expect(() =>
+				unsubscribeHeaders({ url: "http://example.com/unsub" }),
+			).toThrow("HTTPS")
+		})
+
+		it("javascript: URLスキームを拒否する", () => {
+			expect(() =>
+				unsubscribeHeaders({ url: "javascript:alert(1)" }),
+			).toThrow("HTTPS")
+		})
+
+		it("data: URLスキームを拒否する", () => {
+			expect(() =>
+				unsubscribeHeaders({ url: "data:text/html,<h1>evil</h1>" }),
+			).toThrow("HTTPS")
+		})
+
 		it("mailtoにCRLFが含まれる場合エラーを投げる", () => {
 			expect(() =>
 				unsubscribeHeaders({
