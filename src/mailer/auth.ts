@@ -22,18 +22,25 @@ export async function authenticate({
 	if (!capabilities.allowAuth) {
 		return
 	}
-	if (capabilities.authTypeSupported.includes("plain") && preferredTypes.includes("plain")) {
-		await authPlain(transport, credentials)
-	} else if (capabilities.authTypeSupported.includes("login") && preferredTypes.includes("login")) {
-		await authLogin(transport, credentials)
-	} else if (
-		capabilities.authTypeSupported.includes("cram-md5") &&
-		preferredTypes.includes("cram-md5")
-	) {
-		await authCramMd5(transport, credentials, logger)
-	} else {
+	const selected = selectAuthType(capabilities.authTypeSupported, preferredTypes)
+	if (!selected) {
 		throw new SmtpAuthError("[WorkerMailer] No supported authentication method found")
 	}
+	switch (selected) {
+		case "plain":
+			return authPlain(transport, credentials)
+		case "login":
+			return authLogin(transport, credentials)
+		case "cram-md5":
+			return authCramMd5(transport, credentials, logger)
+	}
+}
+
+function selectAuthType(
+	supported: readonly string[],
+	preferred: readonly AuthType[],
+): AuthType | undefined {
+	return preferred.find((type) => supported.includes(type))
 }
 
 async function authPlain(transport: SmtpTransport, credentials: Credentials): Promise<void> {

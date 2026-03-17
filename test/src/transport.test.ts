@@ -113,8 +113,7 @@ describe("SmtpTransport", () => {
 		})
 
 		it("タイムアウト時にSmtpConnectionErrorを投げる", async () => {
-			const { socket } = createMockSocket([])
-			const reader = (socket as any).readable.getReader()
+			const { socket, reader } = createMockSocket([])
 			reader.read.mockImplementation(() => new Promise(() => {}))
 			const transport = new SmtpTransport(socket as never, logger, 50)
 			await expect(transport.readTimeout()).rejects.toThrow(SmtpConnectionError)

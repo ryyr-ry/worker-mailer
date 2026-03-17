@@ -382,10 +382,16 @@ describe("WorkerMailer", () => {
 				authType: ["plain"],
 			})
 
-			// Verify AUTH PLAIN command was sent
-			expect(mockWriter.write).toHaveBeenCalledWith(
-				expect.any(Uint8Array), // Contains base64 encoded credentials
+			// Verify AUTH PLAIN command content
+			const writtenCommands = mockWriter.write.mock.calls.map(
+				(call: [Uint8Array]) => new TextDecoder().decode(call[0]),
 			)
+			const authCommand = writtenCommands.find((cmd: string) => cmd.includes("AUTH PLAIN "))
+			expect(authCommand).toBeDefined()
+			const base64 = authCommand!.replace("AUTH PLAIN ", "").replace("\r\n", "")
+			const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+			const decoded = new TextDecoder().decode(bytes)
+			expect(decoded).toBe("\0test@example.com\0password")
 		})
 
 		it("should throw error on auth failure", async () => {
@@ -701,11 +707,18 @@ describe("WorkerMailer", () => {
 				text: "Hello World",
 			})
 
-			// Verify email commands were sent
-			expect(mockWriter.write).toHaveBeenCalledWith(expect.any(Uint8Array)) // MAIL FROM
-			expect(mockWriter.write).toHaveBeenCalledWith(expect.any(Uint8Array)) // RCPT TO
-			expect(mockWriter.write).toHaveBeenCalledWith(expect.any(Uint8Array)) // DATA
-			expect(mockWriter.write).toHaveBeenCalledWith(expect.any(Uint8Array)) // Email content
+			// Verify email commands were sent with correct content
+			const writtenCommands = mockWriter.write.mock.calls.map(
+				(call: [Uint8Array]) => new TextDecoder().decode(call[0]),
+			)
+			expect(writtenCommands).toContainEqual(
+				expect.stringContaining("MAIL FROM: <sender@example.com>"),
+			)
+			expect(writtenCommands).toContainEqual(
+				expect.stringContaining("RCPT TO: <recipient@example.com>"),
+			)
+			expect(writtenCommands).toContainEqual(expect.stringContaining("DATA\r\n"))
+			expect(writtenCommands).toContainEqual(expect.stringContaining("Subject: Test Email"))
 		})
 
 		it("should handle recipient rejection", async () => {

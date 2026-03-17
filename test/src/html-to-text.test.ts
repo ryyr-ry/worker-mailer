@@ -68,14 +68,12 @@ describe("htmlToText", () => {
 	describe("リスト変換", () => {
 		it("順序なしリストをハイフン形式に変換する", () => {
 			const result = htmlToText("<ul><li>Item 1</li><li>Item 2</li></ul>")
-			expect(result).toContain("- Item 1")
-			expect(result).toContain("- Item 2")
+			expect(result).toBe("- Item 1\n- Item 2")
 		})
 
 		it("順序付きリストをハイフン形式に変換する", () => {
 			const result = htmlToText("<ol><li>First</li><li>Second</li></ol>")
-			expect(result).toContain("- First")
-			expect(result).toContain("- Second")
+			expect(result).toBe("- First\n- Second")
 		})
 	})
 

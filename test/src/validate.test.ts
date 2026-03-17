@@ -87,13 +87,14 @@ describe("validateEmail", () => {
 
 		it("should be invalid when total length exceeds 320 characters", () => {
 			const local = "a".repeat(64)
-			const domain = `${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(63)}.${"e".repeat(63)}`
+			const domain = `${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(63)}.${"e".repeat(63)}.f`
 			const address = `${local}@${domain}`
-			if (address.length <= 320) {
-				return
-			}
+			expect(address.length).toBeGreaterThan(320)
 			const result = validateEmail(address)
 			expect(result.valid).toBe(false)
+			if (!result.valid) {
+				expect(result.reason).toContain("too long")
+			}
 		})
 	})
 
@@ -220,7 +221,7 @@ describe("validateEmail", () => {
 			expect(result.valid).toBe(true)
 		})
 
-		it("should reject quoted-string with consecutive dots (validator does not parse quotes)", () => {
+		it("should reject quoted-string with consecutive dots (RFC 5321 limitation: validator treats quotes as literal)", () => {
 			const result = validateEmail('"user..name"@example.com')
 			expect(result.valid).toBe(false)
 		})

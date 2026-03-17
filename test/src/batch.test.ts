@@ -126,7 +126,7 @@ describe("sendBatch", () => {
 		for (const r of results) {
 			expect(r.success).toBe(true)
 			expect(r.result).toBeDefined()
-			expect(r.result?.response).toContain("250")
+			expect(r.result?.response).toMatch(/^250\b/)
 			expect(r.error).toBeUndefined()
 		}
 

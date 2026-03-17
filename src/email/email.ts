@@ -108,6 +108,10 @@ export class Email {
 				throw new CrlfInjectionError(`header: ${key}`)
 			}
 		}
+
+		if (this.dsnOverride?.envelopeId && Email.CRLF_PATTERN.test(this.dsnOverride.envelopeId)) {
+			throw new CrlfInjectionError("DSN envelope ID")
+		}
 	}
 
 	private validateUserNoCRLF(user: { name?: string; email: string }, field: string) {

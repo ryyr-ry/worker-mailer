@@ -1181,7 +1181,7 @@ describe("Email", () => {
 						text: "body",
 						dsnOverride: { envelopeId: "id\rRCPT" },
 					}),
-			).not.toThrow()
+			).toThrow(CrlfInjectionError)
 		})
 
 		it("should reject envelopeId containing LF", () => {
@@ -1194,7 +1194,7 @@ describe("Email", () => {
 						text: "body",
 						dsnOverride: { envelopeId: "id\nRCPT" },
 					}),
-			).not.toThrow()
+			).toThrow(CrlfInjectionError)
 		})
 
 		it("should accept clean envelopeId", () => {

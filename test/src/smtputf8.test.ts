@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { parseCapabilities } from "../../src/mailer/handshake"
 import { hasNonAscii, mailFrom } from "../../src/mailer/commands"
+import { SmtpCommandError } from "../../src/errors"
 import type { SmtpTransport } from "../../src/mailer/transport"
 import type { SmtpCapabilities } from "../../src/mailer/types"
 
@@ -138,6 +139,23 @@ describe("SMTPUTF8", () => {
 			})
 
 			expect(commands[0]).toBe("MAIL FROM: <user@example.com>")
+		})
+
+		it("サーバーがMAIL FROMを拒否した場合SmtpCommandErrorを投げる", async () => {
+			const transport = {
+				writeLine: async () => {},
+				readTimeout: async () => "550 User not found",
+			} as unknown as SmtpTransport
+			const caps = createCapabilities({ supportsSmtpUtf8: true })
+
+			await expect(
+				mailFrom({
+					transport,
+					fromEmail: "田中@example.com",
+					capabilities: caps,
+					smtpUtf8: true,
+				}),
+			).rejects.toThrow(SmtpCommandError)
 		})
 	})
 })

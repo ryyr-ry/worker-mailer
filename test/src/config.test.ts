@@ -68,4 +68,10 @@ describe("validatePortSecurity", () => {
 		expect(() => validatePortSecurity(25, true, false)).not.toThrow()
 		expect(() => validatePortSecurity(25, false, false)).not.toThrow()
 	})
+
+	it("secure: true + startTls: true の場合はConfigurationErrorを投げる", () => {
+		expect(() => validatePortSecurity(25, true, true)).toThrow(ConfigurationError)
+		expect(() => validatePortSecurity(587, true, true)).toThrow(ConfigurationError)
+		expect(() => validatePortSecurity(465, true, true)).toThrow(ConfigurationError)
+	})
 })

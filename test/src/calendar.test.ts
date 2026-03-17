@@ -24,10 +24,14 @@ describe("Calendar invites", () => {
 	describe("createCalendarEvent", () => {
 		it("generates iCalendar string for basic event", () => {
 			const result = createCalendarEvent(baseOptions())
-			expect(result.content).toContain("BEGIN:VCALENDAR")
-			expect(result.content).toContain("END:VCALENDAR")
-			expect(result.content).toContain("BEGIN:VEVENT")
-			expect(result.content).toContain("END:VEVENT")
+			const lines = result.content.split("\r\n")
+			const beginCalIdx = lines.indexOf("BEGIN:VCALENDAR")
+			const beginEventIdx = lines.indexOf("BEGIN:VEVENT")
+			const endEventIdx = lines.indexOf("END:VEVENT")
+			const endCalIdx = lines.indexOf("END:VCALENDAR")
+			expect(beginCalIdx).toBeLessThan(beginEventIdx)
+			expect(beginEventIdx).toBeLessThan(endEventIdx)
+			expect(endEventIdx).toBeLessThan(endCalIdx)
 			expect(result.content).toContain("VERSION:2.0")
 			expect(result.content).toContain("PRODID:-//worker-mailer//NONSGML v1.0//EN")
 			expect(result.method).toBe("REQUEST")

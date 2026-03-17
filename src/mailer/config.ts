@@ -22,6 +22,11 @@ export function validatePortSecurity(
 	secure: boolean,
 	startTlsEnabled: boolean,
 ): void {
+	if (secure && startTlsEnabled) {
+		throw new ConfigurationError(
+			"[WorkerMailer] Invalid configuration: secure and startTls cannot both be true",
+		)
+	}
 	if (port === 587 && secure) {
 		throw new ConfigurationError(
 			"[WorkerMailer] Invalid configuration: port 587 requires STARTTLS, not implicit TLS (secure: true)",

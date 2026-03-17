@@ -102,22 +102,19 @@ describe("convenience", () => {
 			expect(options.logLevel).toBeUndefined()
 		})
 
-		it("accepts port 0 without range validation", () => {
+		it("rejects port 0 as out of range", () => {
 			const env = { SMTP_HOST: "h", SMTP_PORT: "0" }
-			const options = fromEnv(env)
-			expect(options.port).toBe(0)
+			expect(() => fromEnv(env)).toThrow(ConfigurationError)
 		})
 
-		it("accepts port 65536 without range validation", () => {
+		it("rejects port 65536 as out of range", () => {
 			const env = { SMTP_HOST: "h", SMTP_PORT: "65536" }
-			const options = fromEnv(env)
-			expect(options.port).toBe(65536)
+			expect(() => fromEnv(env)).toThrow(ConfigurationError)
 		})
 
-		it("accepts negative port without range validation", () => {
+		it("rejects negative port as out of range", () => {
 			const env = { SMTP_HOST: "h", SMTP_PORT: "-1" }
-			const options = fromEnv(env)
-			expect(options.port).toBe(-1)
+			expect(() => fromEnv(env)).toThrow(ConfigurationError)
 		})
 
 		it("should throw for NaN port", () => {

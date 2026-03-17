@@ -171,6 +171,30 @@ describe("Logger", () => {
 			expect(msg).toContain("[REDACTED]")
 			expect(msg).not.toContain("cGFzc3dvcmQ=")
 		})
+
+		it("sanitizes AUTH PLAIN credentials at INFO level", () => {
+			const logger = new Logger(LogLevel.INFO, "[SMTP]")
+			logger.info("AUTH PLAIN dXNlcjpwYXNz")
+			const msg = consoleSpy.info.mock.calls[0][0] as string
+			expect(msg).toContain("AUTH PLAIN [REDACTED]")
+			expect(msg).not.toContain("dXNlcjpwYXNz")
+		})
+
+		it("sanitizes AUTH PLAIN credentials at WARN level", () => {
+			const logger = new Logger(LogLevel.WARN, "[SMTP]")
+			logger.warn("AUTH PLAIN dXNlcjpwYXNz")
+			const msg = consoleSpy.warn.mock.calls[0][0] as string
+			expect(msg).toContain("AUTH PLAIN [REDACTED]")
+			expect(msg).not.toContain("dXNlcjpwYXNz")
+		})
+
+		it("sanitizes AUTH PLAIN credentials at ERROR level", () => {
+			const logger = new Logger(LogLevel.ERROR, "[SMTP]")
+			logger.error("AUTH PLAIN dXNlcjpwYXNz")
+			const msg = consoleSpy.error.mock.calls[0][0] as string
+			expect(msg).toContain("AUTH PLAIN [REDACTED]")
+			expect(msg).not.toContain("dXNlcjpwYXNz")
+		})
 	})
 
 	describe("constructor defaults", () => {

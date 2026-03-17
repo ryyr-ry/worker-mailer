@@ -29,6 +29,16 @@ function createCapabilities(overrides: Partial<SmtpCapabilities> = {}): SmtpCapa
 
 const logger = new Logger("NONE", "[test]")
 
+function decodePlainAuth(transport: ReturnType<typeof createMockTransport>): string {
+	const authCall = transport.writeLine.mock.calls.find(
+		(call: [string]) => call[0].startsWith("AUTH PLAIN "),
+	)
+	expect(authCall).toBeDefined()
+	const base64 = authCall![0].replace("AUTH PLAIN ", "")
+	const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+	return new TextDecoder().decode(bytes)
+}
+
 describe("authenticate", () => {
 	describe("PLAIN認証", () => {
 		it("正常にPLAIN認証が成功する", async () => {
@@ -41,7 +51,7 @@ describe("authenticate", () => {
 				preferredTypes: ["plain"],
 				logger,
 			})
-			expect(transport.writeLine).toHaveBeenCalledWith(expect.stringContaining("AUTH PLAIN"))
+			expect(decodePlainAuth(transport)).toBe("\0user\0pass")
 		})
 
 		it("PLAIN認証失敗時にSmtpAuthErrorを投げる", async () => {
@@ -177,7 +187,23 @@ describe("authenticate", () => {
 				preferredTypes: ["plain", "login"],
 				logger,
 			})
-			expect(transport.writeLine).toHaveBeenCalledWith(expect.stringContaining("AUTH PLAIN"))
+			expect(decodePlainAuth(transport)).toBe("\0user\0pass")
+		})
+
+		it("preferredTypesでloginを先に指定するとLOGINを優先する", async () => {
+			const transport = createMockTransport()
+			transport.readTimeout
+				.mockResolvedValueOnce("334 VXNlcm5hbWU6\r\n")
+				.mockResolvedValueOnce("334 UGFzc3dvcmQ6\r\n")
+				.mockResolvedValueOnce("235 OK\r\n")
+			await authenticate({
+				transport: transport as never,
+				credentials: { username: "user", password: "pass" },
+				capabilities: createCapabilities({ authTypeSupported: ["plain", "login"] }),
+				preferredTypes: ["login", "plain"],
+				logger,
+			})
+			expect(transport.writeLine).toHaveBeenCalledWith("AUTH LOGIN")
 		})
 	})
 
@@ -192,7 +218,7 @@ describe("authenticate", () => {
 				preferredTypes: ["plain"],
 				logger,
 			})
-			expect(transport.writeLine).toHaveBeenCalledWith(expect.stringContaining("AUTH PLAIN"))
+			expect(decodePlainAuth(transport)).toBe("\0テスト@example.com\0パスワード")
 		})
 	})
 })

@@ -28,19 +28,19 @@ export default class Logger {
 
 	info(message: string, ...args: unknown[]): void {
 		if (this.level <= LogLevel.INFO) {
-			console.info(this.formatMessage(message), ...args)
+			console.info(this.formatMessage(this.sanitize(message)), ...args)
 		}
 	}
 
 	warn(message: string, ...args: unknown[]): void {
 		if (this.level <= LogLevel.WARN) {
-			console.warn(this.formatMessage(message), ...args)
+			console.warn(this.formatMessage(this.sanitize(message)), ...args)
 		}
 	}
 
 	error(message: string, ...args: unknown[]): void {
 		if (this.level <= LogLevel.ERROR) {
-			console.error(this.formatMessage(message), ...args)
+			console.error(this.formatMessage(this.sanitize(message)), ...args)
 		}
 	}
 

@@ -297,13 +297,14 @@ describe("SendHooks", () => {
 			})
 
 			await expect(mailer.send(baseEmail)).rejects.toThrow()
-			await new Promise<void>((r) => setTimeout(r, 50))
-			expect(onSendError).toHaveBeenCalledWith(
-				baseEmail,
-				expect.objectContaining({
-					message: expect.stringContaining("max retries"),
-				}),
-			)
+			await vi.waitFor(() => {
+				expect(onSendError).toHaveBeenCalledWith(
+					baseEmail,
+					expect.objectContaining({
+						message: expect.stringContaining("max retries"),
+					}),
+				)
+			})
 			await mailer.close()
 		})
 

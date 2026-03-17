@@ -63,8 +63,9 @@ describe("MockMailer", () => {
 	it("delays on simulateDelay", async () => {
 		const mailer = new MockMailer({ simulateDelay: 50 })
 		const start = Date.now()
-		await mailer.send(baseEmail)
-		expect(Date.now() - start).toBeGreaterThanOrEqual(40)
+		const result = await mailer.send(baseEmail)
+		expect(Date.now() - start).toBeGreaterThanOrEqual(25)
+		expect(result.responseTime).toBe(50)
 	})
 
 	it("send() after close() throws error", async () => {

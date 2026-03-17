@@ -57,6 +57,11 @@ export function fromEnv(env: Record<string, unknown>, prefix = "SMTP_"): WorkerM
 			`Environment variable ${prefix}PORT value "${portStr}" is not a valid port number.`,
 		)
 	}
+	if (port < 1 || port > 65535) {
+		throw new ConfigurationError(
+			`Environment variable ${prefix}PORT value "${portStr}" is out of range (must be 1-65535).`,
+		)
+	}
 
 	const user = getString(env, `${prefix}USER`)
 	const pass = getString(env, `${prefix}PASS`)

@@ -173,6 +173,7 @@ describe("WorkerMailerPool 障害回復テスト", () => {
 
 			setupSendMocks(mockSockets[1])
 
+			// Prevent Node.js UnhandledPromiseRejection for intentionally failing promise
 			const result1 = pool.send(baseEmail)
 			result1.catch(() => {})
 			const result2 = pool.send(baseEmail)
