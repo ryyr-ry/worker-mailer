@@ -6,7 +6,7 @@ export default defineConfig({
 		index: "./src/index.ts",
 		calendar: "./src/calendar.ts",
 		testing: "./src/testing-entry.ts",
-		convenience: "./src/convenience.ts",
+		convenience: "./src/convenience/index.ts",
 		validate: "./src/validate.ts",
 	},
 	dts: true,

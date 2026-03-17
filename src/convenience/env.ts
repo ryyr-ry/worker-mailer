@@ -1,11 +1,9 @@
-import type { EmailOptions } from "./email"
-import { ConfigurationError } from "./errors"
-import { LogLevel } from "./logger"
-import type { AuthType, WorkerMailerOptions } from "./mailer"
-import { WorkerMailer } from "./mailer"
-import type { SendResult } from "./result"
+import { ConfigurationError } from "../errors"
+import { LogLevel } from "../logger"
+import type { AuthType, WorkerMailerOptions } from "../mailer"
+import { WorkerMailer } from "../mailer"
 
-function getString(env: Record<string, unknown>, key: string): string | undefined {
+export function getString(env: Record<string, unknown>, key: string): string | undefined {
 	const value = env[key]
 	if (value === undefined || value === null) return undefined
 	return String(value)
@@ -106,42 +104,4 @@ export async function createFromEnv(
 ): Promise<WorkerMailer> {
 	const options = fromEnv(env, prefix)
 	return WorkerMailer.connect(options)
-}
-
-export async function sendOnce(
-	env: Record<string, unknown>,
-	emailOptions: EmailOptions,
-	prefix = "SMTP_",
-): Promise<SendResult> {
-	const mailer = await createFromEnv(env, prefix)
-	try {
-		return await mailer.send(emailOptions)
-	} finally {
-		await mailer.close()
-	}
-}
-
-export type SmtpProvider = "gmail" | "outlook" | "sendgrid"
-
-const SMTP_HOSTS: Record<SmtpProvider, string> = {
-	gmail: "smtp.gmail.com",
-	outlook: "smtp.office365.com",
-	sendgrid: "smtp.sendgrid.net",
-}
-
-export function preset(provider: SmtpProvider, env: Record<string, unknown>): WorkerMailerOptions {
-	const user = getString(env, "SMTP_USER")
-	const pass = getString(env, "SMTP_PASS")
-	const options: WorkerMailerOptions = {
-		host: SMTP_HOSTS[provider],
-		port: 587,
-		secure: false,
-		startTls: true,
-		authType: ["plain"],
-	}
-	if (user !== undefined && pass !== undefined) {
-		options.username = user
-		options.password = pass
-	}
-	return options
 }
