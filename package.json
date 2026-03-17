@@ -49,6 +49,11 @@
 			"types": "./dist/thread.d.ts",
 			"import": "./dist/thread.mjs",
 			"require": "./dist/thread.js"
+		},
+		"./unsubscribe": {
+			"types": "./dist/unsubscribe.d.ts",
+			"import": "./dist/unsubscribe.mjs",
+			"require": "./dist/unsubscribe.js"
 		}
 	},
 	"keywords": [

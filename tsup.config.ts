@@ -12,6 +12,7 @@ export default defineConfig({
 		batch: "./src/batch.ts",
 		preview: "./src/preview.ts",
 		thread: "./src/thread.ts",
+		unsubscribe: "./src/unsubscribe.ts",
 	},
 	dts: true,
 	shims: true,
