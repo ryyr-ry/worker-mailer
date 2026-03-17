@@ -59,7 +59,7 @@ npm install worker-mailer
 The fastest way to send an email. Set your `SMTP_*` env vars in `wrangler.toml` (or the dashboard) and call `sendOnce()`:
 
 ```typescript
-import { sendOnce } from "worker-mailer"
+import { sendOnce } from "worker-mailer/convenience"
 
 export default {
 	async fetch(request, env) {
@@ -80,7 +80,8 @@ export default {
 Pre-configured settings for popular providers. Just supply `SMTP_USER` and `SMTP_PASS`:
 
 ```typescript
-import { WorkerMailer, preset } from "worker-mailer"
+import { WorkerMailer } from "worker-mailer"
+import { preset } from "worker-mailer/convenience"
 
 const mailer = await WorkerMailer.connect(preset("gmail", env))
 
@@ -140,7 +141,7 @@ await mailer.close()
 `MockMailer` implements the `Mailer` interface without making any network connections. Use it for unit tests:
 
 ```typescript
-import { MockMailer } from "worker-mailer"
+import { MockMailer } from "worker-mailer/testing"
 
 const mock = new MockMailer()
 
@@ -242,7 +243,7 @@ type InlineAttachment = {
 Generate iCalendar (.ics) invitations and attach them to emails:
 
 ```typescript
-import { createCalendarEvent } from "worker-mailer"
+import { createCalendarEvent } from "worker-mailer/calendar"
 
 const event = createCalendarEvent({
 	summary: "Team Meeting",
@@ -284,7 +285,7 @@ type CalendarEventOptions = {
 
 type CalendarEventPart = {
 	content: string
-	method: "REQUEST" | "CANCEL" | "REPLY"
+	method?: "REQUEST" | "CANCEL" | "REPLY"
 }
 ```
 
@@ -346,16 +347,18 @@ type SendHooks = {
 Render the raw MIME message of an email without sending it. Useful for debugging and testing:
 
 ```typescript
-import { previewEmail } from "worker-mailer"
+import { previewEmail } from "worker-mailer/preview"
 
-const mime = previewEmail({
+const preview = previewEmail({
 	from: "sender@example.com",
 	to: "recipient@example.com",
 	subject: "Preview this",
 	html: "<h1>Hello</h1>",
 })
 
-console.log(mime) // Full MIME message string
+console.log(preview.raw) // Full MIME message string
+console.log(preview.headers) // Parsed headers as Record<string, string>
+console.log(preview.html) // HTML body (if present)
 ```
 
 ## Health Check (ping)
@@ -535,7 +538,7 @@ type InlineAttachment = {
 
 type CalendarEventPart = {
 	content: string
-	method: "REQUEST" | "CANCEL" | "REPLY"
+	method?: "REQUEST" | "CANCEL" | "REPLY"
 }
 ```
 
@@ -579,7 +582,7 @@ type SendResult = {
 `createTestEmail()` generates a ready-to-send email for verifying your SMTP setup:
 
 ```typescript
-import { createTestEmail } from "worker-mailer"
+import { createTestEmail } from "worker-mailer/testing"
 
 const testEmail = createTestEmail({
 	from: "sender@example.com",
@@ -718,7 +721,8 @@ await pool.close()
 Send multiple emails through a single connection with concurrency control:
 
 ```typescript
-import { WorkerMailer, sendBatch } from "worker-mailer"
+import { WorkerMailer } from "worker-mailer"
+import { sendBatch } from "worker-mailer/batch"
 
 const mailer = await WorkerMailer.connect({ /* ... */ })
 
@@ -788,7 +792,7 @@ type WorkerMailerOptions = {
 
 ## SMTPUTF8 (International Email Addresses)
 
-Send emails to/from internationalized addresses (e.g. `用户@例え.jp`) per RFC 6531. Enable with the `smtpUtf8` connection option — the mailer auto-detects server SMTPUTF8 capability via EHLO and adds the `SMTPUTF8` parameter to `MAIL FROM` when needed.
+Send emails to/from internationalized addresses (e.g. `用户@例え.jp`) per RFC 6531. SMTPUTF8 is **fully automatic** — the mailer detects non-ASCII characters in email addresses, checks server SMTPUTF8 capability via EHLO, and adds the `SMTPUTF8` parameter to `MAIL FROM` when needed. No configuration required.
 
 ```ts
 import { WorkerMailer } from "worker-mailer"
@@ -798,9 +802,9 @@ const mailer = await WorkerMailer.connect({
   port: 587,
   username: "user@example.com",
   password: "password",
-  smtpUtf8: true, // Enable SMTPUTF8 support
 })
 
+// SMTPUTF8 is automatically used when addresses contain non-ASCII characters
 await mailer.send({
   from: { name: "送信者", email: "用户@例え.jp" },
   to: "受信者@example.com",

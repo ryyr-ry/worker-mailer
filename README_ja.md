@@ -59,7 +59,7 @@ npm install worker-mailer
 最もシンプルな方法です。環境変数を設定するだけで、接続・送信・切断を1回の呼び出しで完了できます。
 
 ```typescript
-import { sendOnce } from "worker-mailer"
+import { sendOnce } from "worker-mailer/convenience"
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
@@ -80,7 +80,8 @@ export default {
 Gmail / Outlook / SendGrid 向けの事前設定済みプリセットを使えます。環境変数 `SMTP_USER` と `SMTP_PASS` のみ設定が必要です。
 
 ```typescript
-import { WorkerMailer, preset } from "worker-mailer"
+import { WorkerMailer } from "worker-mailer"
+import { preset } from "worker-mailer/convenience"
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
@@ -151,7 +152,7 @@ export default {
 `MockMailer` はネットワーク接続なしで `Mailer` インターフェースを実装します。ユニットテストに最適です:
 
 ```typescript
-import { MockMailer } from "worker-mailer"
+import { MockMailer } from "worker-mailer/testing"
 
 const mock = new MockMailer()
 
@@ -253,7 +254,7 @@ type InlineAttachment = {
 iCalendar (.ics) 形式の招待状を生成してメールに添付できます:
 
 ```typescript
-import { createCalendarEvent } from "worker-mailer"
+import { createCalendarEvent } from "worker-mailer/calendar"
 
 const event = createCalendarEvent({
 	summary: "チーム会議",
@@ -295,7 +296,7 @@ type CalendarEventOptions = {
 
 type CalendarEventPart = {
 	content: string
-	method: "REQUEST" | "CANCEL" | "REPLY"
+	method?: "REQUEST" | "CANCEL" | "REPLY"
 }
 ```
 
@@ -357,16 +358,18 @@ type SendHooks = {
 メールを送信せずに、生のMIMEメッセージをレンダリングします。デバッグやテストに便利です:
 
 ```typescript
-import { previewEmail } from "worker-mailer"
+import { previewEmail } from "worker-mailer/preview"
 
-const mime = previewEmail({
+const preview = previewEmail({
 	from: "sender@example.com",
 	to: "recipient@example.com",
 	subject: "プレビューテスト",
 	html: "<h1>こんにちは</h1>",
 })
 
-console.log(mime) // 完全なMIMEメッセージ文字列
+console.log(preview.raw) // 完全なMIMEメッセージ文字列
+console.log(preview.headers) // パースされたヘッダー (Record<string, string>)
+console.log(preview.html) // HTMLボディ（存在する場合）
 ```
 
 ## ヘルスチェック（ping）
@@ -546,7 +549,7 @@ type InlineAttachment = {
 
 type CalendarEventPart = {
 	content: string
-	method: "REQUEST" | "CANCEL" | "REPLY"
+	method?: "REQUEST" | "CANCEL" | "REPLY"
 }
 ```
 
@@ -611,7 +614,7 @@ console.log(`応答時間: ${result.responseTime}ms`)
 `createTestEmail()` は、SMTP接続の動作確認用メールを生成します。
 
 ```typescript
-import { createTestEmail } from "worker-mailer"
+import { createTestEmail } from "worker-mailer/testing"
 
 const testEmail = createTestEmail({
 	from: "sender@example.com",
@@ -754,7 +757,8 @@ await pool.close()
 `sendBatch` を使って複数のメールを一括送信できます。
 
 ```typescript
-import { WorkerMailer, sendBatch } from "worker-mailer"
+import { WorkerMailer } from "worker-mailer"
+import { sendBatch } from "worker-mailer/batch"
 
 const mailer = await WorkerMailer.connect({
 	host: "smtp.example.com",
@@ -867,7 +871,7 @@ type WorkerMailerOptions = {
 単一のメールアドレスを検証します。
 
 ```typescript
-import { validateEmail } from "worker-mailer"
+import { validateEmail } from "worker-mailer/validate"
 
 const result = validateEmail("user@example.com")
 if (result.valid) {
@@ -882,7 +886,7 @@ if (result.valid) {
 複数のメールアドレスを一括検証します。
 
 ```typescript
-import { validateEmailBatch } from "worker-mailer"
+import { validateEmailBatch } from "worker-mailer/validate"
 
 const results = validateEmailBatch([
 	"valid@example.com",
@@ -905,7 +909,7 @@ type ValidationResult =
 
 ## SMTPUTF8（国際化メールアドレス）
 
-RFC 6531 に基づき、国際化されたメールアドレス（例: `田中@メール.jp`）でメールを送受信できます。`smtpUtf8` 接続オプションを有効にすると、EHLOでサーバーのSMTPUTF8対応を自動検出し、必要に応じて `MAIL FROM` に `SMTPUTF8` パラメータを付与します。
+RFC 6531 に基づき、国際化されたメールアドレス（例: `田中@メール.jp`）でメールを送受信できます。SMTPUTF8は**完全自動**です — メールアドレスに非ASCII文字が含まれていることを検出し、EHLOでサーバーのSMTPUTF8対応を確認し、必要に応じて `MAIL FROM` に `SMTPUTF8` パラメータを付与します。設定は不要です。
 
 ```ts
 import { WorkerMailer } from "worker-mailer"
@@ -915,9 +919,9 @@ const mailer = await WorkerMailer.connect({
   port: 587,
   username: "user@example.com",
   password: "password",
-  smtpUtf8: true, // SMTPUTF8サポートを有効化
 })
 
+// アドレスに非ASCII文字が含まれている場合、SMTPUTF8は自動的に使用されます
 await mailer.send({
   from: { name: "送信者", email: "田中@メール.jp" },
   to: "受信者@example.com",
