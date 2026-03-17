@@ -64,6 +64,11 @@
 			"types": "./dist/template.d.ts",
 			"import": "./dist/template.mjs",
 			"require": "./dist/template.js"
+		},
+		"./builder": {
+			"types": "./dist/builder.d.ts",
+			"import": "./dist/builder.mjs",
+			"require": "./dist/builder.js"
 		}
 	},
 	"keywords": [

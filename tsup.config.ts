@@ -15,6 +15,7 @@ export default defineConfig({
 		unsubscribe: "./src/unsubscribe.ts",
 		"html-to-text": "./src/html-to-text.ts",
 		template: "./src/template.ts",
+		builder: "./src/builder.ts",
 	},
 	dts: true,
 	shims: true,
