@@ -1,8 +1,5 @@
-export * from "./batch"
-export * from "./dkim"
 export * from "./email"
 export * from "./errors"
 export { LogLevel } from "./logger"
 export * from "./mailer"
-export * from "./preview"
 export * from "./result"

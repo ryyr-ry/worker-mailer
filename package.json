@@ -29,6 +29,21 @@
 			"types": "./dist/validate.d.ts",
 			"import": "./dist/validate.mjs",
 			"require": "./dist/validate.js"
+		},
+		"./dkim": {
+			"types": "./dist/dkim.d.ts",
+			"import": "./dist/dkim.mjs",
+			"require": "./dist/dkim.js"
+		},
+		"./batch": {
+			"types": "./dist/batch.d.ts",
+			"import": "./dist/batch.mjs",
+			"require": "./dist/batch.js"
+		},
+		"./preview": {
+			"types": "./dist/preview.d.ts",
+			"import": "./dist/preview.mjs",
+			"require": "./dist/preview.js"
 		}
 	},
 	"keywords": [
