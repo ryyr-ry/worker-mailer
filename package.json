@@ -59,6 +59,11 @@
 			"types": "./dist/html-to-text.d.ts",
 			"import": "./dist/html-to-text.mjs",
 			"require": "./dist/html-to-text.js"
+		},
+		"./template": {
+			"types": "./dist/template.d.ts",
+			"import": "./dist/template.mjs",
+			"require": "./dist/template.js"
 		}
 	},
 	"keywords": [

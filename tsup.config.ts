@@ -14,6 +14,7 @@ export default defineConfig({
 		thread: "./src/thread.ts",
 		unsubscribe: "./src/unsubscribe.ts",
 		"html-to-text": "./src/html-to-text.ts",
+		template: "./src/template.ts",
 	},
 	dts: true,
 	shims: true,
