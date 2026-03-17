@@ -66,7 +66,9 @@ describe("Inline images (CID)", () => {
 		expect(raw).toContain("text/plain")
 		const altIdx = raw.indexOf("multipart/alternative")
 		const relIdx = raw.indexOf("multipart/related")
+		const plainIdx = raw.indexOf("text/plain")
 		expect(altIdx).toBeLessThan(relIdx)
+		expect(altIdx).toBeLessThan(plainIdx)
 	})
 
 	it("text + html + inline + attach produces full 4-layer structure", () => {
@@ -259,16 +261,17 @@ describe("Inline images (CID)", () => {
 		expect(raw).toContain("Content-Type: application/octet-stream")
 	})
 
-	it("text+html+inline produces multipart/alternative containing multipart/related", () => {
+	it("text+html+inline: related is nested inside alternative boundary", () => {
 		const email = makeEmail({ text: "plain fallback" })
 		const raw = email.getRawMessage()
-		expect(raw).toContain("multipart/alternative")
-		expect(raw).toContain("multipart/related")
-		const altIdx = raw.indexOf("multipart/alternative")
+		const altMatch = raw.match(/multipart\/alternative;\s*boundary="([^"]+)"/)
+		expect(altMatch).not.toBeNull()
+		const altBoundary = altMatch![1]
+		const altStart = raw.indexOf(`--${altBoundary}`)
+		const altEnd = raw.indexOf(`--${altBoundary}--`)
 		const relIdx = raw.indexOf("multipart/related")
-		expect(altIdx).toBeLessThan(relIdx)
-		expect(raw).toContain("text/plain")
-		expect(raw).toContain("Content-ID: <logo>")
+		expect(relIdx).toBeGreaterThan(altStart)
+		expect(relIdx).toBeLessThan(altEnd)
 	})
 
 	it("html + inline + attach (no text) produces mixed > related", () => {

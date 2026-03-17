@@ -64,7 +64,7 @@ describe("MockMailer", () => {
 		const mailer = new MockMailer({ simulateDelay: 50 })
 		const start = Date.now()
 		const result = await mailer.send(baseEmail)
-		expect(Date.now() - start).toBeGreaterThanOrEqual(25)
+		expect(Date.now() - start).toBeGreaterThanOrEqual(40)
 		expect(result.responseTime).toBe(50)
 	})
 

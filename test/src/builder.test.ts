@@ -82,6 +82,10 @@ describe("MailBuilder", () => {
 			expect(builder.subject("S")).toBe(builder)
 			expect(builder.text("T")).toBe(builder)
 			expect(builder.html("H")).toBe(builder)
+			expect(builder.cc("c@x.com")).toBe(builder)
+			expect(builder.bcc("d@x.com")).toBe(builder)
+			expect(builder.replyTo("r@x.com")).toBe(builder)
+			expect(builder.header("X-Test", "v")).toBe(builder)
 		})
 	})
 
@@ -192,6 +196,7 @@ describe("MailBuilder", () => {
 				.build()
 			expect(email.attachments).toHaveLength(1)
 			expect(email.attachments?.[0].filename).toBe("file.txt")
+			expect(email.attachments?.[0].content).toBe("data")
 		})
 
 		it("複数ファイルを添付する", () => {
@@ -241,21 +246,21 @@ describe("MailBuilder", () => {
 
 	describe("バリデーション", () => {
 		it("fromがない場合エラーを投げる", () => {
-			expect(() => new MailBuilder().to("b@x.com").subject("S").build()).toThrow(
-				"from is required",
-			)
+			const fn = () => new MailBuilder().to("b@x.com").subject("S").build()
+			expect(fn).toThrow(Error)
+			expect(fn).toThrow("from is required")
 		})
 
 		it("toがない場合エラーを投げる", () => {
-			expect(() => new MailBuilder().from("a@x.com").subject("S").build()).toThrow(
-				"to is required",
-			)
+			const fn = () => new MailBuilder().from("a@x.com").subject("S").build()
+			expect(fn).toThrow(Error)
+			expect(fn).toThrow("to is required")
 		})
 
 		it("subjectがない場合エラーを投げる", () => {
-			expect(() => new MailBuilder().from("a@x.com").to("b@x.com").build()).toThrow(
-				"subject is required",
-			)
+			const fn = () => new MailBuilder().from("a@x.com").to("b@x.com").build()
+			expect(fn).toThrow(Error)
+			expect(fn).toThrow("subject is required")
 		})
 	})
 })

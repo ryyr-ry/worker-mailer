@@ -222,7 +222,7 @@ describe("sendBatch", () => {
 		for (const r of results) {
 			expect(r.success).toBe(true)
 			expect(r.result).toBeDefined()
-			expect(r.result?.response).toContain("250")
+			expect(r.result?.response).toMatch(/^250\b/)
 		}
 
 		await mailer.close()
@@ -381,7 +381,7 @@ describe("sendBatch", () => {
 
 		expect(results).toHaveLength(1)
 		expect(results[0].success).toBe(true)
-		expect(results[0].result?.response).toContain("250")
+		expect(results[0].result?.response).toMatch(/^250\b/)
 	})
 
 	it("single email batch failure", async () => {

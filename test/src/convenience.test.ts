@@ -2,6 +2,7 @@ import { connect } from "cloudflare:sockets"
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
 import { createFromEnv, fromEnv, preset, sendOnce } from "../../src/convenience"
 import { ConfigurationError } from "../../src/errors"
+import { LogLevel } from "../../src/logger"
 
 vi.mock("cloudflare:sockets", () => ({
 	connect: vi.fn(),
@@ -93,7 +94,7 @@ describe("convenience", () => {
 		it("should parse SMTP_LOG_LEVEL correctly", () => {
 			const env = { SMTP_HOST: "h", SMTP_PORT: "25", SMTP_LOG_LEVEL: "error" }
 			const options = fromEnv(env)
-			expect(options.logLevel).toBeDefined()
+			expect(options.logLevel).toBe(LogLevel.ERROR)
 		})
 
 		it("should ignore unknown SMTP_LOG_LEVEL values", () => {

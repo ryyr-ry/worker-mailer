@@ -241,7 +241,7 @@ describe("DKIM signing", () => {
 			expect(tags.c).toBe("relaxed/relaxed")
 			expect(tags.d).toBe("example.com")
 			expect(tags.s).toBe("test")
-			expect(tags.h).toBeDefined()
+			expect(tags.h).toMatch(/from/)
 			expect(tags.bh).toMatch(/^[A-Za-z0-9+/]+=*$/)
 			expect(tags.bh.length).toBeGreaterThan(40)
 			expect(tags.b).toMatch(/^[A-Za-z0-9+/\s]+=*$/)

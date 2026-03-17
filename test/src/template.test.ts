@@ -169,6 +169,11 @@ describe("render", () => {
 			expect(result).toBe("never closed")
 		})
 
+		it("閉じタグのないセクションでfalsy値は空文字列を返す", () => {
+			const result = render("{{#show}}never closed", { show: false })
+			expect(result).toBe("")
+		})
+
 		it("空のセクションを空文字列で返す", () => {
 			expect(render("{{#show}}{{/show}}", { show: true })).toBe("")
 		})

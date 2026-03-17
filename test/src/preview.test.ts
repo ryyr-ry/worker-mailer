@@ -48,8 +48,8 @@ describe("Email preview", () => {
 			subject: "Test Subject",
 			text: "body",
 		})
-		expect(preview.headers.From).toBeDefined()
-		expect(preview.headers.To).toBeDefined()
+		expect(preview.headers.From).toBe("sender@example.com")
+		expect(preview.headers.To).toBe("recipient@example.com")
 		expect(preview.headers.Subject).toBe("Test Subject")
 		expect(preview.headers.Date).toBeDefined()
 		expect(preview.headers["Message-ID"]).toBeDefined()
@@ -119,14 +119,9 @@ describe("Email preview", () => {
 		const preview = previewEmail(options)
 		const email = new Email(options)
 		const directRaw = email.getRawMessage()
-		// Both go through the same Email constructor, but Date/Message-ID differ
-		// Verify structural equivalence by checking shared headers and body
-		expect(preview.raw).toContain("Subject: Consistency")
-		expect(directRaw).toContain("Subject: Consistency")
-		expect(preview.raw).toContain("body text")
-		expect(directRaw).toContain("body text")
-		expect(preview.raw).toContain("MIME-Version: 1.0")
-		expect(directRaw).toContain("MIME-Version: 1.0")
+		const normalize = (raw: string) =>
+			raw.replace(/^Date:.*$/m, "").replace(/^Message-ID:.*$/m, "")
+		expect(normalize(preview.raw)).toBe(normalize(directRaw))
 	})
 
 	it("preview with calendar event includes text/calendar part", () => {

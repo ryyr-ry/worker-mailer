@@ -173,7 +173,7 @@ describe("ping()", () => {
 		const writeArgs = mockWriter.write.mock.calls.map((call: [Uint8Array]) =>
 			new TextDecoder().decode(call[0]),
 		)
-		expect(writeArgs.some((arg: string) => arg.includes("NOOP"))).toBe(true)
+		expect(writeArgs).toContainEqual(expect.stringContaining("NOOP\r\n"))
 		await mailer.close()
 	})
 

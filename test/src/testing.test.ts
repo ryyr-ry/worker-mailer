@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { Email } from "../../src/email/email"
+import { EmailValidationError } from "../../src/errors"
 import { createTestEmail } from "../../src/testing"
 
 describe("createTestEmail", () => {
@@ -89,7 +90,7 @@ describe("createTestEmail", () => {
 			from: "",
 			to: "recipient@example.com",
 		})
-		expect(() => new Email(opts)).toThrow()
+		expect(() => new Email(opts)).toThrow(EmailValidationError)
 	})
 
 	it("empty to results in Email with empty recipient list", () => {
