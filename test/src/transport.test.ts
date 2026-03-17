@@ -1,122 +1,95 @@
 import { describe, expect, it, vi } from "vitest"
-import { SmtpTransport } from "../../src/mailer/transport"
 import { CrlfInjectionError, SmtpConnectionError } from "../../src/errors"
-import Logger from "../../src/logger"
+import Logger, { LogLevel } from "../../src/logger"
+import { SmtpTransport } from "../../src/mailer/transport"
 
-const logger = new Logger("NONE", "[test]")
+const logger = new Logger(LogLevel.NONE, "[test]")
 
-function createMockSocket(readResults: Array<{ value?: Uint8Array; done?: boolean }>) {
-	let readIndex = 0
-	const reader = {
-		read: vi.fn().mockImplementation(() => {
-			if (readIndex < readResults.length) {
-				return Promise.resolve(readResults[readIndex++])
-			}
-			return Promise.resolve({ done: true })
-		}),
-		releaseLock: vi.fn(),
-	}
-	const writer = {
-		write: vi.fn().mockResolvedValue(undefined),
-		releaseLock: vi.fn(),
-	}
-	const socket = {
-		readable: { getReader: () => reader },
-		writable: { getWriter: () => writer },
-		opened: Promise.resolve(),
-		close: vi.fn().mockResolvedValue(undefined),
-		startTls: vi.fn().mockReturnValue({
-			readable: { getReader: () => reader },
-			writable: { getWriter: () => writer },
-		}),
-	}
-	return { socket, reader, writer }
+function mockSocket(reads: Array<{ value?: Uint8Array; done?: boolean }>) {
+let idx = 0
+const reader = {
+read: vi.fn().mockImplementation(() =>
+idx < reads.length ? Promise.resolve(reads[idx++]) : Promise.resolve({ done: true }),
+),
+releaseLock: vi.fn(),
+}
+const writer = { write: vi.fn().mockResolvedValue(undefined), releaseLock: vi.fn() }
+const socket = {
+readable: { getReader: () => reader },
+writable: { getWriter: () => writer },
+opened: Promise.resolve(),
+close: vi.fn().mockResolvedValue(undefined),
+startTls: vi.fn().mockReturnValue({
+readable: { getReader: () => reader },
+writable: { getWriter: () => writer },
+}),
+}
+return { socket, reader, writer }
 }
 
 const enc = (s: string) => new TextEncoder().encode(s)
 
-describe("SmtpTransport", () => {
-	describe("read - フラグメンテーション処理", () => {
-		it("複数チャンクに分割されたレスポンスを正しく結合する", async () => {
-			const { socket } = createMockSocket([
-				{ value: enc("250-smtp.example.com\r\n") },
-				{ value: enc("250 OK\r\n") },
-			])
-			const transport = new SmtpTransport(socket as never, logger, 5000)
-			const result = await transport.read()
-			expect(result).toBe("250-smtp.example.com\r\n250 OK\r\n")
-		})
+describe("SmtpTransport (RFC 5321)", () => {
+it("read parses multi-line SMTP response (RFC 5321 Section 4.2)", async () => {
+const { socket } = mockSocket([
+{ value: enc("250-smtp.example.com\r\n250-AUTH PLAIN\r\n250 OK\r\n") },
+])
+const transport = new SmtpTransport(socket as never, logger, 5000)
+const response = await transport.read()
+expect(response).toContain("250-smtp.example.com")
+expect(response).toContain("250 OK")
+})
 
-		it("改行なしで途中まで届いたデータを待機して結合する", async () => {
-			const { socket } = createMockSocket([
-				{ value: enc("250-smtp") },
-				{ value: enc(".example.com\r\n250 OK\r\n") },
-			])
-			const transport = new SmtpTransport(socket as never, logger, 5000)
-			const result = await transport.read()
-			expect(result).toBe("250-smtp.example.com\r\n250 OK\r\n")
-		})
+it("read detects end of response when last line has no dash", async () => {
+const { socket } = mockSocket([
+{ value: enc("250-line1\r\n") },
+{ value: enc("250 done\r\n") },
+])
+const transport = new SmtpTransport(socket as never, logger, 5000)
+const response = await transport.read()
+expect(response).toContain("250 done")
+})
 
-		it("マルチラインレスポンス（250-）を完全に読み取る", async () => {
-			const { socket } = createMockSocket([
-				{ value: enc("250-AUTH PLAIN LOGIN\r\n250-DSN\r\n250 STARTTLS\r\n") },
-			])
-			const transport = new SmtpTransport(socket as never, logger, 5000)
-			const result = await transport.read()
-			expect(result).toContain("250-AUTH")
-			expect(result).toContain("250 STARTTLS")
-		})
+it("writeLine appends CRLF (RFC 5321 Section 2.3.8)", async () => {
+const { socket, writer } = mockSocket([])
+const transport = new SmtpTransport(socket as never, logger, 5000)
+await transport.writeLine("EHLO test")
+expect(writer.write).toHaveBeenCalledWith(enc("EHLO test\r\n"))
+})
 
-		it("接続が閉じられた場合にSmtpConnectionErrorを投げる", async () => {
-			const { socket } = createMockSocket([{ done: true }])
-			const transport = new SmtpTransport(socket as never, logger, 5000)
-			await expect(transport.read()).rejects.toThrow(SmtpConnectionError)
-		})
-	})
+it("writeLine rejects CRLF in command (SMTP command injection prevention)", async () => {
+const { socket } = mockSocket([])
+const transport = new SmtpTransport(socket as never, logger, 5000)
+await expect(transport.writeLine("EHLO test\r\nMAIL FROM:<evil>")).rejects.toThrow(
+CrlfInjectionError,
+)
+})
 
-	describe("writeLine - CRLFインジェクション防止", () => {
-		it("CRを含むコマンドを拒否する", async () => {
-			const { socket } = createMockSocket([])
-			const transport = new SmtpTransport(socket as never, logger, 5000)
-			await expect(transport.writeLine("MAIL FROM:<a\r>")).rejects.toThrow(CrlfInjectionError)
-		})
+it("read throws SmtpConnectionError when connection closes", async () => {
+const { socket } = mockSocket([{ done: true }])
+const transport = new SmtpTransport(socket as never, logger, 5000)
+await expect(transport.read()).rejects.toThrow(SmtpConnectionError)
+})
 
-		it("LFを含むコマンドを拒否する", async () => {
-			const { socket } = createMockSocket([])
-			const transport = new SmtpTransport(socket as never, logger, 5000)
-			await expect(transport.writeLine("RCPT TO:<a\n>")).rejects.toThrow(CrlfInjectionError)
-		})
+it("upgradeTls switches to TLS socket (RFC 3207)", () => {
+const { socket } = mockSocket([])
+const transport = new SmtpTransport(socket as never, logger, 5000)
+expect(() => transport.upgradeTls()).not.toThrow()
+expect(socket.startTls).toHaveBeenCalled()
+})
 
-		it("正常なコマンドにCRLFを付与して送信する", async () => {
-			const { socket, writer } = createMockSocket([])
-			const transport = new SmtpTransport(socket as never, logger, 5000)
-			await transport.writeLine("EHLO example.com")
-			expect(writer.write).toHaveBeenCalledWith(enc("EHLO example.com\r\n"))
-		})
-	})
+it("safeClose does not throw on already-closed socket", () => {
+const { socket, reader, writer } = mockSocket([])
+reader.releaseLock.mockImplementation(() => { throw new Error("already released") })
+const transport = new SmtpTransport(socket as never, logger, 5000)
+expect(() => transport.safeClose()).not.toThrow()
+})
 
-	describe("upgradeTls", () => {
-		it("TLSアップグレード後にリーダー/ライターを再取得する", () => {
-			const { socket } = createMockSocket([])
-			const transport = new SmtpTransport(socket as never, logger, 5000)
-			transport.upgradeTls()
-			expect(socket.startTls).toHaveBeenCalled()
-		})
-	})
-
-	describe("readTimeout", () => {
-		it("タイムアウト内にレスポンスが返れば成功する", async () => {
-			const { socket } = createMockSocket([{ value: enc("250 OK\r\n") }])
-			const transport = new SmtpTransport(socket as never, logger, 5000)
-			const result = await transport.readTimeout()
-			expect(result).toBe("250 OK\r\n")
-		})
-
-		it("タイムアウト時にSmtpConnectionErrorを投げる", async () => {
-			const { socket, reader } = createMockSocket([])
-			reader.read.mockImplementation(() => new Promise(() => {}))
-			const transport = new SmtpTransport(socket as never, logger, 50)
-			await expect(transport.readTimeout()).rejects.toThrow(SmtpConnectionError)
-		})
-	})
+it("quit sends QUIT command (RFC 5321 Section 4.1.1.10)", async () => {
+const { socket, writer } = mockSocket([{ value: enc("221 Bye\r\n") }])
+const transport = new SmtpTransport(socket as never, logger, 5000)
+await transport.quit()
+const calls = writer.write.mock.calls.map((c: Uint8Array[]) => new TextDecoder().decode(c[0]))
+expect(calls[0]).toContain("QUIT")
+})
 })

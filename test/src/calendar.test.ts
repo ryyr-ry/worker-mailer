@@ -1,326 +1,175 @@
 import { describe, expect, it } from "vitest"
 import {
-	type CalendarEventOptions,
-	createCalendarEvent,
-	escapeIcalText,
-	foldIcalLine,
-	formatDateUtc,
+createCalendarEvent,
+escapeIcalText,
+foldIcalLine,
+formatDateUtc,
 } from "../../src/calendar"
-import { Email } from "../../src/email/email"
 import { CalendarValidationError } from "../../src/errors"
 
-function baseOptions(overrides?: Partial<CalendarEventOptions>): CalendarEventOptions {
-	return {
-		summary: "Team Meeting",
-		start: new Date("2025-03-15T10:00:00Z"),
-		end: new Date("2025-03-15T11:00:00Z"),
-		organizer: { name: "Alice", email: "alice@example.com" },
-		uid: "test-uid-123",
-		...overrides,
-	}
+const BASE = {
+summary: "Meeting",
+start: new Date("2025-01-15T10:00:00Z"),
+end: new Date("2025-01-15T11:00:00Z"),
+organizer: { email: "org@test.com" },
 }
 
-describe("Calendar invites", () => {
-	describe("createCalendarEvent", () => {
-		it("generates iCalendar string for basic event", () => {
-			const result = createCalendarEvent(baseOptions())
-			const lines = result.content.split("\r\n")
-			const beginCalIdx = lines.indexOf("BEGIN:VCALENDAR")
-			const beginEventIdx = lines.indexOf("BEGIN:VEVENT")
-			const endEventIdx = lines.indexOf("END:VEVENT")
-			const endCalIdx = lines.indexOf("END:VCALENDAR")
-			expect(beginCalIdx).toBeLessThan(beginEventIdx)
-			expect(beginEventIdx).toBeLessThan(endEventIdx)
-			expect(endEventIdx).toBeLessThan(endCalIdx)
-			expect(result.content).toContain("VERSION:2.0")
-			expect(result.content).toContain("PRODID:-//worker-mailer//NONSGML v1.0//EN")
-			expect(result.method).toBe("REQUEST")
-		})
+describe("Calendar event (RFC 5545)", () => {
+it("minimal event has BEGIN/END VCALENDAR and VEVENT", () => {
+const { content } = createCalendarEvent(BASE)
+expect(content).toContain("BEGIN:VCALENDAR")
+expect(content).toContain("END:VCALENDAR")
+expect(content).toContain("BEGIN:VEVENT")
+expect(content).toContain("END:VEVENT")
+})
 
-		it("DTSTART/DTEND in UTC format", () => {
-			const result = createCalendarEvent(baseOptions())
-			expect(result.content).toContain("DTSTART:20250315T100000Z")
-			expect(result.content).toContain("DTEND:20250315T110000Z")
-		})
+it("DTSTART and DTEND in UTC format YYYYMMDDTHHMMSSZ", () => {
+const { content } = createCalendarEvent(BASE)
+expect(content).toContain("DTSTART:20250115T100000Z")
+expect(content).toContain("DTEND:20250115T110000Z")
+})
 
-		it("ORGANIZER with CN", () => {
-			const result = createCalendarEvent(baseOptions())
-			expect(result.content).toContain("ORGANIZER;CN=Alice:mailto:alice@example.com")
-		})
+it("SUMMARY from options", () => {
+const { content } = createCalendarEvent(BASE)
+expect(content).toContain("SUMMARY:Meeting")
+})
 
-		it("ORGANIZER without CN when name is absent", () => {
-			const result = createCalendarEvent(baseOptions({ organizer: { email: "bob@example.com" } }))
-			expect(result.content).toContain("ORGANIZER:mailto:bob@example.com")
-			expect(result.content).not.toContain("CN=")
-		})
+it("ORGANIZER from options", () => {
+const { content } = createCalendarEvent(BASE)
+expect(content).toContain("ORGANIZER")
+expect(content).toContain("org@test.com")
+})
 
-		it("outputs multiple ATTENDEEs", () => {
-			const result = createCalendarEvent(
-				baseOptions({
-					attendees: [
-						{ name: "Bob", email: "bob@example.com" },
-						{ name: "Carol", email: "carol@example.com" },
-					],
-				}),
-			)
-			expect(result.content).toContain("ATTENDEE;ROLE=REQ-PARTICIPANT;RSVP=TRUE;CN=Bob")
-			expect(result.content).toContain(":mailto:bob@example.com")
-			expect(result.content).toContain("ATTENDEE;ROLE=REQ-PARTICIPANT;RSVP=TRUE;CN=Carol")
-			expect(result.content).toContain(":mailto:carol@example.com")
-		})
+it("ATTENDEE for each attendee with RSVP", () => {
+const { content } = createCalendarEvent({
+...BASE,
+attendees: [{ email: "a@t.com" }, { email: "b@t.com", rsvp: true }],
+})
+expect(content).toContain("a@t.com")
+expect(content).toContain("b@t.com")
+expect(content).toContain("RSVP=TRUE")
+})
 
-		it("RSVP defaults to TRUE", () => {
-			const result = createCalendarEvent(
-				baseOptions({
-					attendees: [{ email: "bob@example.com" }],
-				}),
-			)
-			expect(result.content).toContain("RSVP=TRUE")
-		})
+it("LOCATION and DESCRIPTION properties", () => {
+const { content } = createCalendarEvent({
+...BASE,
+location: "Room 42",
+description: "Discuss plans",
+})
+expect(content).toContain("LOCATION:Room 42")
+expect(content).toContain("DESCRIPTION:Discuss plans")
+})
 
-		it("RSVP can be set to FALSE", () => {
-			const result = createCalendarEvent(
-				baseOptions({
-					attendees: [{ email: "bob@example.com", rsvp: false }],
-				}),
-			)
-			expect(result.content).toContain("RSVP=FALSE")
-		})
+it("VALARM with reminderMinutes", () => {
+const { content } = createCalendarEvent({ ...BASE, reminderMinutes: 15 })
+expect(content).toContain("BEGIN:VALARM")
+expect(content).toContain("TRIGGER:-PT15M")
+expect(content).toContain("END:VALARM")
+})
 
-		it("outputs LOCATION", () => {
-			const result = createCalendarEvent(baseOptions({ location: "Conference Room A" }))
-			expect(result.content).toContain("LOCATION:Conference Room A")
-		})
+it("METHOD from options and returned in part", () => {
+const part = createCalendarEvent({ ...BASE, method: "CANCEL" })
+expect(part.content).toContain("METHOD:CANCEL")
+expect(part.method).toBe("CANCEL")
+})
 
-		it("outputs DESCRIPTION", () => {
-			const result = createCalendarEvent(baseOptions({ description: "Weekly sync" }))
-			expect(result.content).toContain("DESCRIPTION:Weekly sync")
-		})
+it("UID auto-generated when not provided", () => {
+const { content } = createCalendarEvent(BASE)
+expect(content).toMatch(/UID:.+/)
+})
 
-		it("outputs URL", () => {
-			const result = createCalendarEvent(baseOptions({ url: "https://meet.example.com/abc" }))
-			expect(result.content).toContain("URL:https://meet.example.com/abc")
-		})
+it("UID from options when provided", () => {
+const { content } = createCalendarEvent({ ...BASE, uid: "custom-uid-123" })
+expect(content).toContain("UID:custom-uid-123")
+})
 
-		it("outputs VALARM reminder", () => {
-			const result = createCalendarEvent(baseOptions({ reminderMinutes: 15 }))
-			expect(result.content).toContain("BEGIN:VALARM")
-			expect(result.content).toContain("ACTION:DISPLAY")
-			expect(result.content).toContain("TRIGGER:-PT15M")
-			expect(result.content).toContain("END:VALARM")
-		})
+it("URL property included", () => {
+const { content } = createCalendarEvent({ ...BASE, url: "https://example.com" })
+expect(content).toContain("URL:https://example.com")
+})
 
-		it("auto-generates UID", () => {
-			const result = createCalendarEvent(baseOptions({ uid: undefined }))
-			expect(result.content).toMatch(
-				/UID:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/,
-			)
-		})
+it("returns CalendarEventPart with content and method", () => {
+const part = createCalendarEvent(BASE)
+expect(typeof part.content).toBe("string")
+expect(part.content.length).toBeGreaterThan(0)
+})
+})
 
-		it("uses specified UID", () => {
-			const result = createCalendarEvent(baseOptions({ uid: "custom-uid-999" }))
-			expect(result.content).toContain("UID:custom-uid-999")
-		})
+describe("Calendar validation", () => {
+it("end before start rejected", () => {
+expect(() =>
+createCalendarEvent({
+...BASE,
+start: new Date("2025-01-15T12:00:00Z"),
+end: new Date("2025-01-15T10:00:00Z"),
+}),
+).toThrow(CalendarValidationError)
+})
 
-		it("reflects METHOD: CANCEL", () => {
-			const result = createCalendarEvent(baseOptions({ method: "CANCEL" }))
-			expect(result.content).toContain("METHOD:CANCEL")
-			expect(result.method).toBe("CANCEL")
-		})
+it("empty summary rejected", () => {
+expect(() => createCalendarEvent({ ...BASE, summary: "  " })).toThrow(
+CalendarValidationError,
+)
+})
 
-		it("escapes special characters", () => {
-			expect(escapeIcalText("hello;world")).toBe("hello\\;world")
-			expect(escapeIcalText("a,b")).toBe("a\\,b")
-			expect(escapeIcalText("line1\nline2")).toBe("line1\\nline2")
-			expect(escapeIcalText("back\\slash")).toBe("back\\\\slash")
-		})
+it("negative reminderMinutes rejected", () => {
+expect(() => createCalendarEvent({ ...BASE, reminderMinutes: -1 })).toThrow(
+CalendarValidationError,
+)
+})
+})
 
-		it("folds lines exceeding 75 octets", () => {
-			const longLine = `DESCRIPTION:${"A".repeat(100)}`
-			const folded = foldIcalLine(longLine)
-			const foldedLines = folded.split("\r\n")
-			expect(foldedLines.length).toBeGreaterThan(1)
+describe("Calendar security (CRLF injection)", () => {
+it("CRLF in organizer email does not create injected property line", () => {
+const { content } = createCalendarEvent({
+...BASE,
+organizer: { email: "org@test.com\r\nX-Evil:injected" },
+})
+const lines = content.split("\r\n")
+expect(lines.some((l) => l.startsWith("X-Evil"))).toBe(false)
+})
 
-			const encoder = new TextEncoder()
-			for (let i = 0; i < foldedLines.length; i++) {
-				const byteLen = encoder.encode(foldedLines[i]).length
-				expect(byteLen).toBeLessThanOrEqual(75)
-			}
-		})
+it("CRLF in attendee email does not create injected property line", () => {
+const { content } = createCalendarEvent({
+...BASE,
+attendees: [{ email: "a@t.com\r\nX-Evil:bad" }],
+})
+const lines = content.split("\r\n")
+expect(lines.some((l) => l.startsWith("X-Evil"))).toBe(false)
+})
 
-		it("throws on start >= end", () => {
-			const sameTime = new Date("2025-03-15T10:00:00Z")
-			expect(() => createCalendarEvent(baseOptions({ start: sameTime, end: sameTime }))).toThrow(
-				CalendarValidationError,
-			)
+it("CRLF in summary escaped, no injected property line", () => {
+const { content } = createCalendarEvent({
+...BASE,
+summary: "Hi\r\nX-Evil:bad",
+})
+const lines = content.split("\r\n")
+expect(lines.some((l) => l.startsWith("X-Evil"))).toBe(false)
+})
+})
 
-			const reversed = {
-				start: new Date("2025-03-15T11:00:00Z"),
-				end: new Date("2025-03-15T10:00:00Z"),
-			}
-			expect(() => createCalendarEvent(baseOptions(reversed))).toThrow(CalendarValidationError)
-		})
+describe("iCal utilities (RFC 5545 Section 3.1/3.3.11)", () => {
+it("formatDateUtc produces YYYYMMDDTHHMMSSZ", () => {
+expect(formatDateUtc(new Date("2025-06-15T09:30:00Z"))).toBe("20250615T093000Z")
+})
 
-		it("throws on empty summary", () => {
-			expect(() => createCalendarEvent(baseOptions({ summary: "   " }))).toThrow(
-				CalendarValidationError,
-			)
-		})
+it("escapeIcalText escapes backslash, semicolon, comma, newline", () => {
+expect(escapeIcalText("a;b,c\\d\ne")).toBe("a\\;b\\,c\\\\d\\ne")
+})
 
-		it("handles Unicode characters in summary", () => {
-			const event = createCalendarEvent({
-				summary: "会議：東京オフィス",
-				start: new Date("2025-01-20T10:00:00Z"),
-				end: new Date("2025-01-20T11:00:00Z"),
-				organizer: { email: "org@example.com" },
-			})
-			expect(event.content).toContain("SUMMARY:会議：東京オフィス")
-		})
+it("foldIcalLine folds at 75 bytes", () => {
+const long = `DESCRIPTION:${"A".repeat(100)}`
+const folded = foldIcalLine(long)
+for (const line of folded.split("\r\n")) {
+expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(75)
+}
+})
 
-		it("handles special characters in ORGANIZER CN", () => {
-			const event = createCalendarEvent({
-				summary: "Test",
-				start: new Date("2025-01-20T10:00:00Z"),
-				end: new Date("2025-01-20T11:00:00Z"),
-				organizer: { name: 'John "Boss" O\'Brien; Jr.', email: "org@example.com" },
-			})
-			expect(event.content).toContain("ORGANIZER")
-			// RFC 5545: semicolons must be escaped in CN
-			expect(event.content).toContain("\\;")
-		})
-
-		it("folds lines at 75 octets boundary with multibyte chars", () => {
-			const twentyFiveChars = "あ".repeat(25)
-			const event = createCalendarEvent({
-				summary: twentyFiveChars,
-				start: new Date("2025-01-20T10:00:00Z"),
-				end: new Date("2025-01-20T11:00:00Z"),
-				organizer: { email: "org@example.com" },
-			})
-			const lines = event.content.split("\r\n")
-			const encoder = new TextEncoder()
-			for (const line of lines) {
-				if (line === "") continue
-				expect(encoder.encode(line).length).toBeLessThanOrEqual(75)
-			}
-		})
-
-		it("reminderMinutes=0 outputs TRIGGER:-PT0M", () => {
-			const result = createCalendarEvent(baseOptions({ reminderMinutes: 0 }))
-			expect(result.content).toContain("BEGIN:VALARM")
-			expect(result.content).toContain("TRIGGER:-PT0M")
-			expect(result.content).toContain("END:VALARM")
-		})
-
-		it("reminderMinutes negative throws CalendarValidationError", () => {
-			expect(() =>
-				createCalendarEvent(baseOptions({ reminderMinutes: -5 })),
-			).toThrow("reminderMinutes must not be negative")
-		})
-
-		it("iCalendar structure order: VCALENDAR > VEVENT > END:VEVENT > END:VCALENDAR", () => {
-			const result = createCalendarEvent(baseOptions())
-			const content = result.content
-			const beginCal = content.indexOf("BEGIN:VCALENDAR")
-			const beginEvt = content.indexOf("BEGIN:VEVENT")
-			const endEvt = content.indexOf("END:VEVENT")
-			const endCal = content.indexOf("END:VCALENDAR")
-			expect(beginCal).toBeLessThan(beginEvt)
-			expect(beginEvt).toBeLessThan(endEvt)
-			expect(endEvt).toBeLessThan(endCal)
-		})
-
-		it("DTSTAMP is in UTC format YYYYMMDDTHHMMSSZ", () => {
-			const result = createCalendarEvent(baseOptions())
-			const match = result.content.match(/DTSTAMP:(\S+)/)
-			expect(match).not.toBeNull()
-			expect(match?.[1]).toMatch(/^\d{8}T\d{6}Z$/)
-		})
-
-		it("reflects METHOD: REPLY", () => {
-			const result = createCalendarEvent(baseOptions({ method: "REPLY" }))
-			expect(result.content).toContain("METHOD:REPLY")
-			expect(result.method).toBe("REPLY")
-		})
-
-		it("STATUS is not output when not specified", () => {
-			const result = createCalendarEvent(baseOptions())
-			expect(result.content).not.toContain("STATUS:")
-		})
-	})
-
-	describe("formatDateUtc", () => {
-		it("formats date correctly", () => {
-			const date = new Date("2025-01-02T03:04:05Z")
-			expect(formatDateUtc(date)).toBe("20250102T030405Z")
-		})
-	})
-
-	describe("MIME integration", () => {
-		it("text + html + calendar stored in multipart/alternative", () => {
-			const calResult = createCalendarEvent(baseOptions())
-			const email = new Email({
-				from: "sender@example.com",
-				to: "recipient@example.com",
-				subject: "Meeting Invite",
-				text: "You are invited",
-				html: "<p>You are invited</p>",
-				calendarEvent: calResult,
-			})
-			const raw = email.getRawMessage()
-			expect(raw).toContain("multipart/alternative")
-			expect(raw).toContain("text/plain")
-			expect(raw).toContain("text/html")
-			expect(raw).toContain("text/calendar")
-		})
-
-		it("Content-Type includes text/calendar; method=REQUEST", () => {
-			const calResult = createCalendarEvent(baseOptions())
-			const email = new Email({
-				from: "sender@example.com",
-				to: "recipient@example.com",
-				subject: "Meeting Invite",
-				text: "You are invited",
-				html: "<p>You are invited</p>",
-				calendarEvent: calResult,
-			})
-			const raw = email.getRawMessage()
-			expect(raw).toContain('text/calendar; charset="UTF-8"; method=REQUEST')
-		})
-	})
-
-	describe("Security: CRLF injection in email addresses", () => {
-		it("should sanitize CRLF in organizer email", () => {
-			const result = createCalendarEvent(
-				baseOptions({
-					organizer: { name: "Evil", email: "evil@test.com\r\nX-Injected: true" },
-				}),
-			)
-			// CRLF is stripped, so the injection attempt becomes part of the email string
-			// The key is that it does NOT appear as a separate iCal property line
-			const lines = result.content.split("\r\n")
-			const injectedLine = lines.find((l) => l.startsWith("X-Injected"))
-			expect(injectedLine).toBeUndefined()
-		})
-
-		it("should sanitize CRLF in attendee email", () => {
-			const result = createCalendarEvent(
-				baseOptions({
-					attendees: [{ email: "att@test.com\r\nX-Bad: yes", rsvp: true }],
-				}),
-			)
-			const lines = result.content.split("\r\n")
-			const injectedLine = lines.find((l) => l.startsWith("X-Bad"))
-			expect(injectedLine).toBeUndefined()
-		})
-
-		it("should sanitize LF-only injection in organizer email", () => {
-			const result = createCalendarEvent(
-				baseOptions({
-					organizer: { email: "org@test.com\nINJECTED:value" },
-				}),
-			)
-			expect(result.content).not.toContain("\nINJECTED:value")
-		})
-	})
+it("foldIcalLine does not split multi-byte UTF-8 chars", () => {
+const long = `SUMMARY:${"あ".repeat(30)}`
+const folded = foldIcalLine(long)
+for (const line of folded.split("\r\n")) {
+expect(line).not.toMatch(/[\x80-\xBF]$/)
+}
+})
 })

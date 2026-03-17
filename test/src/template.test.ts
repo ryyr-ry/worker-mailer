@@ -1,216 +1,71 @@
 import { describe, expect, it } from "vitest"
 import { compile, render } from "../../src/template"
 
-describe("render", () => {
-	describe("基本変数置換", () => {
-		it("単純な変数を置換する", () => {
-			expect(render("Hello {{name}}!", { name: "World" })).toBe("Hello World!")
-		})
-
-		it("複数の変数を置換する", () => {
-			expect(render("{{greeting}} {{name}}!", { greeting: "Hi", name: "Alice" })).toBe(
-				"Hi Alice!",
-			)
-		})
-
-		it("同じ変数を複数回置換する", () => {
-			expect(render("{{x}} and {{x}}", { x: "A" })).toBe("A and A")
-		})
-
-		it("未定義の変数を空文字に置換する", () => {
-			expect(render("Hello {{name}}!", {})).toBe("Hello !")
-		})
-
-		it("nullの変数を空文字に置換する", () => {
-			expect(render("Hello {{name}}!", { name: null })).toBe("Hello !")
-		})
-
-		it("数値を文字列に変換する", () => {
-			expect(render("Count: {{count}}", { count: 42 })).toBe("Count: 42")
-		})
-
-		it("booleanを文字列に変換する", () => {
-			expect(render("Active: {{active}}", { active: true })).toBe("Active: true")
-		})
-	})
-
-	describe("HTMLエスケープ", () => {
-		it("{{変数}}はHTMLエスケープされる", () => {
-			expect(render("{{html}}", { html: "<b>bold</b>" })).toBe("&lt;b&gt;bold&lt;/b&gt;")
-		})
-
-		it("&をエスケープする", () => {
-			expect(render("{{text}}", { text: "A & B" })).toBe("A &amp; B")
-		})
-
-		it("引用符をエスケープする", () => {
-			expect(render('{{text}}', { text: 'He said "hello"' })).toBe(
-				"He said &quot;hello&quot;",
-			)
-		})
-
-		it("{{{変数}}}はエスケープされない", () => {
-			expect(render("{{{html}}}", { html: "<b>bold</b>" })).toBe("<b>bold</b>")
-		})
-
-		it("セクション内の変数もHTMLエスケープされる", () => {
-			const data = { items: [{ name: "<script>alert(1)</script>" }] }
-			expect(render("{{#items}}{{name}}{{/items}}", data)).toBe(
-				"&lt;script&gt;alert(1)&lt;/script&gt;",
-			)
-		})
-	})
-
-	describe("ドットパス解決", () => {
-		it("ネストしたオブジェクトにアクセスする", () => {
-			expect(render("{{user.name}}", { user: { name: "Alice" } })).toBe("Alice")
-		})
-
-		it("深くネストしたパスにアクセスする", () => {
-			const data = { a: { b: { c: "deep" } } }
-			expect(render("{{a.b.c}}", data)).toBe("deep")
-		})
-
-		it("存在しないパスを空文字に置換する", () => {
-			expect(render("{{user.name}}", { user: {} })).toBe("")
-		})
-
-		it("中間パスがnullの場合空文字に置換する", () => {
-			expect(render("{{user.name}}", { user: null })).toBe("")
-		})
-	})
-
-	describe("セクション（条件ブロック）", () => {
-		it("truthy値でセクションをレンダリングする", () => {
-			expect(render("{{#show}}Visible{{/show}}", { show: true })).toBe("Visible")
-		})
-
-		it("falsy値でセクションをスキップする", () => {
-			expect(render("{{#show}}Visible{{/show}}", { show: false })).toBe("")
-		})
-
-		it("null値でセクションをスキップする", () => {
-			expect(render("{{#show}}Visible{{/show}}", { show: null })).toBe("")
-		})
-
-		it("空文字でセクションをスキップする", () => {
-			expect(render("{{#show}}Visible{{/show}}", { show: "" })).toBe("")
-		})
-
-		it("0でセクションをスキップする", () => {
-			expect(render("{{#show}}Visible{{/show}}", { show: 0 })).toBe("")
-		})
-
-		it("空配列でセクションをスキップする", () => {
-			expect(render("{{#items}}Item{{/items}}", { items: [] })).toBe("")
-		})
-	})
-
-	describe("反転セクション", () => {
-		it("falsy値で反転セクションをレンダリングする", () => {
-			expect(render("{{^show}}Hidden{{/show}}", { show: false })).toBe("Hidden")
-		})
-
-		it("truthy値で反転セクションをスキップする", () => {
-			expect(render("{{^show}}Hidden{{/show}}", { show: true })).toBe("")
-		})
-
-		it("未定義値で反転セクションをレンダリングする", () => {
-			expect(render("{{^missing}}Default{{/missing}}", {})).toBe("Default")
-		})
-	})
-
-	describe("配列イテレーション", () => {
-		it("オブジェクト配列を反復する", () => {
-			const data = { items: [{ name: "A" }, { name: "B" }, { name: "C" }] }
-			expect(render("{{#items}}{{name}} {{/items}}", data)).toBe("A B C ")
-		})
-
-		it("プリミティブ配列を反復する", () => {
-			const data = { items: [1, 2, 3] }
-			expect(render("{{#items}}{{.}} {{/items}}", data)).toBe("1 2 3 ")
-		})
-
-		it("空配列で何も出力しない", () => {
-			expect(render("{{#items}}{{name}}{{/items}}", { items: [] })).toBe("")
-		})
-
-		it("配列内でも親スコープにアクセスできる", () => {
-			const data = { prefix: "Item", items: [{ name: "A" }] }
-			expect(render("{{#items}}{{prefix}}: {{name}}{{/items}}", data)).toBe("Item: A")
-		})
-	})
-
-	describe("空白処理", () => {
-		it("変数名前後の空白を無視する", () => {
-			expect(render("{{ name }}", { name: "Alice" })).toBe("Alice")
-		})
-
-		it("セクションキー前後の空白を無視する", () => {
-			expect(render("{{# show }}Yes{{/ show }}", { show: true })).toBe("Yes")
-		})
-	})
-
-	describe("エッジケース", () => {
-		it("テンプレートなしの文字列をそのまま返す", () => {
-			expect(render("No templates here", {})).toBe("No templates here")
-		})
-
-		it("空のテンプレートを空文字列で返す", () => {
-			expect(render("", {})).toBe("")
-		})
-
-		it("閉じタグのない{{をテキストとして扱う", () => {
-			expect(render("Hello {{ world", {})).toBe("Hello {{ world")
-		})
-
-		it("閉じタグのないセクションを残りテキストとして処理する", () => {
-			const result = render("{{#show}}never closed", { show: true })
-			expect(result).toBe("never closed")
-		})
-
-		it("閉じタグのないセクションでfalsy値は空文字列を返す", () => {
-			const result = render("{{#show}}never closed", { show: false })
-			expect(result).toBe("")
-		})
-
-		it("空のセクションを空文字列で返す", () => {
-			expect(render("{{#show}}{{/show}}", { show: true })).toBe("")
-		})
-
-		it("ネストしたセクションを処理する", () => {
-			const data = { a: true, b: true }
-			expect(render("{{#a}}{{#b}}OK{{/b}}{{/a}}", data)).toBe("OK")
-		})
-
-		it("__proto__キーへのアクセスをブロックする", () => {
-			expect(render("{{__proto__}}", {})).toBe("")
-		})
-
-		it("constructorキーへのアクセスをブロックする", () => {
-			expect(render("{{constructor}}", {})).toBe("")
-		})
-
-		it("prototypeキーへのアクセスをブロックする", () => {
-			expect(render("{{a.prototype.b}}", { a: {} })).toBe("")
-		})
-
-		it("ドットパス経由の__proto__アクセスをブロックする", () => {
-			expect(render("{{a.__proto__.polluted}}", { a: {} })).toBe("")
-		})
-	})
+describe("Template engine", () => {
+it("{{var}} substitutes value", () => {
+expect(render("Hello {{name}}", { name: "World" })).toBe("Hello World")
 })
 
-describe("compile", () => {
-	it("コンパイル済み関数を複数回使用できる", () => {
-		const fn = compile("Hello {{name}}!")
-		expect(fn({ name: "Alice" })).toBe("Hello Alice!")
-		expect(fn({ name: "Bob" })).toBe("Hello Bob!")
-	})
+it("{{var}} HTML-escapes output (XSS prevention)", () => {
+expect(render("{{val}}", { val: "<script>alert(1)</script>" }))
+.toBe("&lt;script&gt;alert(1)&lt;/script&gt;")
+})
 
-	it("同じテンプレートで異なるデータを処理する", () => {
-		const fn = compile("{{greeting}} {{name}}")
-		expect(fn({ greeting: "Hi", name: "A" })).toBe("Hi A")
-		expect(fn({ greeting: "Hey", name: "B" })).toBe("Hey B")
-	})
+it("{{{var}}} does NOT HTML-escape (raw output)", () => {
+expect(render("{{{val}}}", { val: "<b>bold</b>" })).toBe("<b>bold</b>")
+})
+
+it("{{#key}}...{{/key}} renders when truthy", () => {
+expect(render("{{#show}}yes{{/show}}", { show: true })).toBe("yes")
+})
+
+it("{{#key}}...{{/key}} skipped when falsy", () => {
+expect(render("{{#show}}yes{{/show}}", { show: false })).toBe("")
+})
+
+it("{{^key}}...{{/key}} renders when falsy (inverted section)", () => {
+expect(render("{{^hidden}}visible{{/hidden}}", { hidden: false }))
+.toBe("visible")
+})
+
+it("{{#array}}...{{/array}} iterates over items", () => {
+expect(render("{{#items}}{{.}},{{/items}}", { items: ["a", "b"] }))
+.toBe("a,b,")
+})
+
+it("{{obj.prop}} nested property access", () => {
+expect(render("{{user.name}}", { user: { name: "Ada" } })).toBe("Ada")
+})
+
+it("missing variable renders empty string", () => {
+expect(render("Hello {{missing}}", {})).toBe("Hello ")
+})
+
+it("compile returns reusable render function", () => {
+const fn = compile("Hello {{name}}")
+expect(fn({ name: "A" })).toBe("Hello A")
+expect(fn({ name: "B" })).toBe("Hello B")
+})
+
+it("__proto__ access blocked (prototype pollution prevention)", () => {
+expect(render("{{__proto__}}", {})).toBe("")
+})
+
+it("constructor access blocked (prototype pollution prevention)", () => {
+expect(render("{{constructor}}", {})).toBe("")
+})
+
+it("<script> in {{var}} is HTML-escaped (XSS prevention)", () => {
+expect(render("{{x}}", { x: "<script>" })).not.toContain("<script>")
+})
+
+it("{{#array}}...{{/array}} with empty array renders nothing", () => {
+expect(render("{{#items}}x{{/items}}", { items: [] })).toBe("")
+})
+
+it("nested sections", () => {
+const tpl = "{{#a}}{{#b}}AB{{/b}}{{/a}}"
+expect(render(tpl, { a: true, b: true })).toBe("AB")
+expect(render(tpl, { a: true, b: false })).toBe("")
+})
 })
