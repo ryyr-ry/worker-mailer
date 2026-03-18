@@ -141,8 +141,10 @@ it("Symbol.asyncDispose closes connection", async () => {
 setupSocket([GREETING, EHLO_AUTH, AUTH_OK, QUIT_OK])
 const mailer = await WorkerMailer.connect(OPTS)
 await mailer[Symbol.asyncDispose]()
-// After dispose, mailer should be closed
-expect(true).toBe(true) // No throw = success
+// After dispose, send should be rejected
+await expect(
+mailer.send({ from: "a@t.com", to: "b@t.com", subject: "T", text: "hi" }),
+).rejects.toThrow()
 })
 
 it("CrlfInjectionError is not retried", async () => {

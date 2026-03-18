@@ -40,10 +40,10 @@ expect(result).toContain("- A")
 expect(result).toContain("- B")
 })
 
-it("<ol><li> converted to list items", () => {
+it("<ol><li> as numbered list", () => {
 const result = htmlToText("<ol><li>A</li><li>B</li></ol>")
-expect(result).toContain("A")
-expect(result).toContain("B")
+expect(result).toContain("1. A")
+expect(result).toContain("2. B")
 })
 
 it("<hr> as separator", () => {
@@ -62,7 +62,7 @@ it("word wrapping at specified length with spaces", () => {
 const words = Array.from({ length: 40 }, () => "word").join(" ")
 const result = htmlToText(words, { wordwrap: 40 })
 for (const line of result.split("\n")) {
-if (line.trim()) expect(line.length).toBeLessThanOrEqual(45)
+if (line.trim()) expect(line.length).toBeLessThanOrEqual(40)
 }
 })
 

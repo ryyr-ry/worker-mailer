@@ -67,6 +67,12 @@ function convertLinks(html: string, preserve: boolean): string {
 
 function convertLists(html: string): string {
 	let text = html
+	// Process <ol> blocks with numbered items
+	text = text.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_, inner) => {
+		let index = 0
+		return `\n${inner.replace(/<li[^>]*>/gi, () => `${++index}. `)}\n`
+	})
+	// Remaining <li> (from <ul>) get dash prefix
 	text = text.replace(/<li[^>]*>/gi, "- ")
 	text = text.replace(/<\/li>/gi, "\n")
 	text = text.replace(/<\/?[ou]l[^>]*>/gi, "\n")

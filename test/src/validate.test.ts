@@ -26,6 +26,9 @@ it("invalid: missing domain", () => {
 expect(validateEmail("user@")).toMatchObject({ valid: false })
 })
 
+it("invalid: double @ (RFC 5321 Section 4.1.2 unquoted local part)", () => {
+expect(validateEmail("a@@b.com")).toMatchObject({ valid: false })
+})
 
 it("CRLF in address returns invalid (injection prevention)", () => {
 expect(validateEmail("a@b.com\r\nRCPT TO:<evil>")).toMatchObject({ valid: false })

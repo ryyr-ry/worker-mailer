@@ -41,6 +41,9 @@ function validateLocalPart(local: string): ValidationResult | undefined {
 			reason: `Local part is too long (${local.length} chars, max ${MAX_LOCAL_LENGTH})`,
 		}
 	}
+	if (!local.startsWith('"') && local.includes("@")) {
+		return { valid: false, reason: "Local part contains unquoted @" }
+	}
 	if (local.startsWith(".")) return { valid: false, reason: "Local part starts with a dot" }
 	if (local.endsWith(".")) return { valid: false, reason: "Local part ends with a dot" }
 	if (local.includes("..")) return { valid: false, reason: "Local part contains consecutive dots" }

@@ -78,8 +78,8 @@ setup([connSession, connSession])
 const pool = new WorkerMailerPool({ ...BASE_OPTS, poolSize: 2 })
 await pool.connect()
 await pool.close()
-// No throw = success
-expect(true).toBe(true)
+// After close, send should be rejected
+await expect(pool.send(EMAIL)).rejects.toThrow()
 })
 
 it("pool ping checks connection health", async () => {
@@ -98,6 +98,7 @@ setup([connSession])
 const pool = new WorkerMailerPool({ ...BASE_OPTS, poolSize: 1 })
 await pool.connect()
 await pool[Symbol.asyncDispose]()
-expect(true).toBe(true)
+// After dispose, send should be rejected
+await expect(pool.send(EMAIL)).rejects.toThrow()
 })
 })

@@ -184,7 +184,7 @@ headers,
 expect(headers.From).toContain("=?UTF-8?Q?")
 })
 
-it("empty subject produces Subject header", () => {
+it("empty subject omits Subject header (falsy check)", () => {
 const headers: Record<string, string> = {}
 resolveHeaders({
 from: { email: "a@b.com" },
