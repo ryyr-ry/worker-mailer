@@ -89,6 +89,8 @@ export class Email {
 			subject: this.subject,
 			headers: this.headers,
 		})
+
+		Object.freeze(this.headers)
 	}
 
 	private static readonly CRLF_PATTERN = /[\r\n]/
@@ -140,7 +142,7 @@ export class Email {
 		}
 	}
 
-	private static readonly UNSAFE_FILENAME_PATTERN = /[\r\n"]/
+	private static readonly UNSAFE_FILENAME_PATTERN = /[\r\n"]|(?:^|[/\\])\.\.(?:[/\\]|$)/
 
 	private static readonly BASE64_PATTERN = /^[A-Za-z0-9+/\r\n]+=*$/
 

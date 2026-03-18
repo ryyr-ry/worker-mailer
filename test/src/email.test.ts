@@ -241,5 +241,32 @@ expect(raw).toContain("MIME-Version: 1.0")
 // Must have proper header/body separator
 expect(raw).toMatch(/\r\n\r\n/)
 })
+
+it("null byte in email address rejected (control char injection)", () => {
+expect(() => new Email(minimal({ from: "a\x00@b.com" }))).toThrow()
+})
+
+it("extremely long email address rejected (RFC 5321 Section 4.5.3.1)", () => {
+const longAddr = `${"a".repeat(300)}@example.com`
+expect(() => new Email(minimal({ from: longAddr }))).toThrow()
+})
+
+it("path traversal in attachment filename rejected (security)", () => {
+expect(
+() => new Email(minimal({
+attachments: [{ filename: "../../etc/passwd", content: "dGVzdA==" }],
+})),
+).toThrow(EmailValidationError)
+})
+
+it("headers object is frozen after construction (immutability)", () => {
+const email = new Email(minimal())
+expect(Object.isFrozen(email.headers)).toBe(true)
+})
+
+it("Date header contains timezone (RFC 5322 Section 3.3)", () => {
+const email = new Email(minimal())
+expect(email.headers.Date).toMatch(/[+-]\d{4}$/)
+})
 })
 })
