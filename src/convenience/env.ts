@@ -1,10 +1,9 @@
-import type { EmailOptions } from "./email"
-import { LogLevel } from "./logger"
-import type { AuthType, WorkerMailerOptions } from "./mailer"
-import { WorkerMailer } from "./mailer"
-import type { SendResult } from "./result"
+import { ConfigurationError } from "../errors"
+import { LogLevel } from "../logger"
+import type { AuthType, WorkerMailerOptions } from "../mailer"
+import { WorkerMailer } from "../mailer"
 
-function getString(env: Record<string, unknown>, key: string): string | undefined {
+export function getString(env: Record<string, unknown>, key: string): string | undefined {
 	const value = env[key]
 	if (value === undefined || value === null) return undefined
 	return String(value)
@@ -13,8 +12,8 @@ function getString(env: Record<string, unknown>, key: string): string | undefine
 function requireString(env: Record<string, unknown>, key: string): string {
 	const value = getString(env, key)
 	if (value === undefined || value === "") {
-		throw new Error(
-			`環境変数 ${key} が設定されていません。SMTP接続に必要な環境変数を確認してください。`,
+		throw new ConfigurationError(
+			`Environment variable ${key} is not set. Please check the required SMTP environment variables.`,
 		)
 	}
 	return value
@@ -54,7 +53,14 @@ export function fromEnv(env: Record<string, unknown>, prefix = "SMTP_"): WorkerM
 	const portStr = requireString(env, `${prefix}PORT`)
 	const port = Number.parseInt(portStr, 10)
 	if (Number.isNaN(port)) {
-		throw new Error(`環境変数 ${prefix}PORT の値 "${portStr}" は有効なポート番号ではありません。`)
+		throw new ConfigurationError(
+			`Environment variable ${prefix}PORT value "${portStr}" is not a valid port number.`,
+		)
+	}
+	if (port < 1 || port > 65535) {
+		throw new ConfigurationError(
+			`Environment variable ${prefix}PORT value "${portStr}" is out of range (must be 1-65535).`,
+		)
 	}
 
 	const user = getString(env, `${prefix}USER`)
@@ -72,13 +78,26 @@ export function fromEnv(env: Record<string, unknown>, prefix = "SMTP_"): WorkerM
 	if (secure !== undefined) options.secure = secure
 	if (startTls !== undefined) options.startTls = startTls
 	if (user !== undefined && pass !== undefined) {
-		options.credentials = { username: user, password: pass }
+		options.username = user
+		options.password = pass
 	}
 	if (authType !== undefined && authType.length > 0) options.authType = authType
 	if (ehloHostname !== undefined) options.ehloHostname = ehloHostname
 	if (logLevel !== undefined) options.logLevel = logLevel
 	if (maxRetries !== undefined && !Number.isNaN(maxRetries)) {
 		options.maxRetries = maxRetries
+	}
+
+	const dkimDomain = getString(env, `${prefix}DKIM_DOMAIN`)
+	const dkimSelector = getString(env, `${prefix}DKIM_SELECTOR`)
+	const dkimPrivateKey = getString(env, `${prefix}DKIM_PRIVATE_KEY`)
+
+	if (dkimDomain && dkimSelector && dkimPrivateKey) {
+		options.dkim = {
+			domainName: dkimDomain,
+			keySelector: dkimSelector,
+			privateKey: dkimPrivateKey.replace(/\\n/g, "\n"),
+		}
 	}
 
 	return options
@@ -90,59 +109,4 @@ export async function createFromEnv(
 ): Promise<WorkerMailer> {
 	const options = fromEnv(env, prefix)
 	return WorkerMailer.connect(options)
-}
-
-export async function sendOnce(
-	env: Record<string, unknown>,
-	emailOptions: EmailOptions,
-	prefix = "SMTP_",
-): Promise<SendResult> {
-	const mailer = await createFromEnv(env, prefix)
-	try {
-		return await mailer.send(emailOptions)
-	} finally {
-		await mailer.close()
-	}
-}
-
-function credentialsFromEnv(
-	env: Record<string, unknown>,
-): { username: string; password: string } | undefined {
-	const user = getString(env, "SMTP_USER")
-	const pass = getString(env, "SMTP_PASS")
-	if (user === undefined || pass === undefined) return undefined
-	return { username: user, password: pass }
-}
-
-export function gmailPreset(env: Record<string, unknown>): WorkerMailerOptions {
-	return {
-		host: "smtp.gmail.com",
-		port: 587,
-		secure: false,
-		startTls: true,
-		authType: ["plain"],
-		credentials: credentialsFromEnv(env),
-	}
-}
-
-export function outlookPreset(env: Record<string, unknown>): WorkerMailerOptions {
-	return {
-		host: "smtp.office365.com",
-		port: 587,
-		secure: false,
-		startTls: true,
-		authType: ["plain"],
-		credentials: credentialsFromEnv(env),
-	}
-}
-
-export function sendgridPreset(env: Record<string, unknown>): WorkerMailerOptions {
-	return {
-		host: "smtp.sendgrid.net",
-		port: 587,
-		secure: false,
-		startTls: true,
-		authType: ["plain"],
-		credentials: credentialsFromEnv(env),
-	}
 }

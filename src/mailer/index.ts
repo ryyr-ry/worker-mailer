@@ -1,10 +1,4 @@
 export { WorkerMailerPool } from "./pool"
-export { SmtpTransport } from "./transport"
-export type {
-	AuthType,
-	Credentials,
-	DsnOptions,
-	SmtpCapabilities,
-	WorkerMailerOptions,
-} from "./types"
+export type { AuthType, Mailer, SendHooks, WorkerMailerOptions } from "./types"
+export { SendCancelledError } from "./types"
 export { WorkerMailer } from "./worker-mailer"

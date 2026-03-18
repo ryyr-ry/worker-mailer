@@ -1,3 +1,4 @@
+import { CrlfInjectionError, SmtpConnectionError } from "../errors"
 import type Logger from "../logger"
 import { decode, encode, execTimeout } from "../utils"
 
@@ -21,7 +22,7 @@ export class SmtpTransport {
 		while (true) {
 			const { value, done } = await this.reader.read()
 			if (done) {
-				throw new Error(
+				throw new SmtpConnectionError(
 					"[WorkerMailer] Connection closed: SMTP server closed the connection unexpectedly",
 				)
 			}
@@ -47,7 +48,9 @@ export class SmtpTransport {
 		return execTimeout(
 			this.read(),
 			this.responseTimeoutMs,
-			new Error("[WorkerMailer] Connection timeout: waiting for SMTP server response"),
+			new SmtpConnectionError(
+				"[WorkerMailer] Connection timeout: waiting for SMTP server response",
+			),
 		)
 	}
 
@@ -58,7 +61,7 @@ export class SmtpTransport {
 
 	async writeLine(line: string): Promise<void> {
 		if (/[\r\n]/.test(line)) {
-			throw new Error("[WorkerMailer] Security error: CRLF injection detected in SMTP command")
+			throw new CrlfInjectionError("SMTP command")
 		}
 		await this.write(`${line}\r\n`)
 	}
@@ -81,19 +84,19 @@ export class SmtpTransport {
 		try {
 			this.reader.releaseLock()
 		} catch (_) {
-			/* すでにリリース済みの場合 */
+			this.logger.debug("[WorkerMailer] Reader lock already released")
 		}
 		try {
 			this.writer.releaseLock()
 		} catch (_) {
-			/* すでにリリース済みの場合 */
+			this.logger.debug("[WorkerMailer] Writer lock already released")
 		}
 		try {
 			this.socket
 				.close()
 				.catch(() => this.logger.error("[WorkerMailer] Failed to close socket during reconnect"))
 		} catch (_) {
-			/* ソケットが既に閉じている場合 */
+			this.logger.debug("[WorkerMailer] Socket already closed")
 		}
 	}
 
@@ -101,7 +104,7 @@ export class SmtpTransport {
 		await execTimeout(
 			this.socket.opened,
 			timeoutMs,
-			new Error("[WorkerMailer] Connection timeout: socket connection timed out"),
+			new SmtpConnectionError("[WorkerMailer] Connection timeout: socket connection timed out"),
 		)
 	}
 }

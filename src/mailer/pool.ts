@@ -1,9 +1,10 @@
-import type { EmailOptions } from "../email"
+import type { EmailOptions } from "../email/types"
+import { SmtpConnectionError } from "../errors"
 import type { SendResult } from "../result"
-import type { WorkerMailerOptions } from "./types"
+import type { Mailer, WorkerMailerOptions } from "./types"
 import { WorkerMailer } from "./worker-mailer"
 
-export class WorkerMailerPool {
+export class WorkerMailerPool implements Mailer {
 	private readonly options: WorkerMailerOptions
 	private readonly poolSize: number
 	private readonly mailers: WorkerMailer[] = []
@@ -26,11 +27,19 @@ export class WorkerMailerPool {
 
 	send(options: EmailOptions): Promise<SendResult> {
 		if (this.mailers.length === 0) {
-			return Promise.reject(new Error("[WorkerMailerPool] Send failed: pool is not connected"))
+			return Promise.reject(
+				new SmtpConnectionError("[WorkerMailerPool] Send failed: pool is not connected"),
+			)
 		}
 		const mailer = this.mailers[this.nextIndex % this.mailers.length]
 		this.nextIndex++
 		return mailer.send(options)
+	}
+
+	async ping(): Promise<boolean> {
+		if (this.mailers.length === 0) return false
+		const results = await Promise.all(this.mailers.map((m) => m.ping()))
+		return results.every(Boolean)
 	}
 
 	async close(): Promise<void> {

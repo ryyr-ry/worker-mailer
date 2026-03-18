@@ -4,6 +4,73 @@
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.mjs",
+			"require": "./dist/index.js"
+		},
+		"./calendar": {
+			"types": "./dist/calendar.d.ts",
+			"import": "./dist/calendar.mjs",
+			"require": "./dist/calendar.js"
+		},
+		"./testing": {
+			"types": "./dist/testing.d.ts",
+			"import": "./dist/testing.mjs",
+			"require": "./dist/testing.js"
+		},
+		"./convenience": {
+			"types": "./dist/convenience.d.ts",
+			"import": "./dist/convenience.mjs",
+			"require": "./dist/convenience.js"
+		},
+		"./validate": {
+			"types": "./dist/validate.d.ts",
+			"import": "./dist/validate.mjs",
+			"require": "./dist/validate.js"
+		},
+		"./dkim": {
+			"types": "./dist/dkim.d.ts",
+			"import": "./dist/dkim.mjs",
+			"require": "./dist/dkim.js"
+		},
+		"./batch": {
+			"types": "./dist/batch.d.ts",
+			"import": "./dist/batch.mjs",
+			"require": "./dist/batch.js"
+		},
+		"./preview": {
+			"types": "./dist/preview.d.ts",
+			"import": "./dist/preview.mjs",
+			"require": "./dist/preview.js"
+		},
+		"./thread": {
+			"types": "./dist/thread.d.ts",
+			"import": "./dist/thread.mjs",
+			"require": "./dist/thread.js"
+		},
+		"./unsubscribe": {
+			"types": "./dist/unsubscribe.d.ts",
+			"import": "./dist/unsubscribe.mjs",
+			"require": "./dist/unsubscribe.js"
+		},
+		"./html-to-text": {
+			"types": "./dist/html-to-text.d.ts",
+			"import": "./dist/html-to-text.mjs",
+			"require": "./dist/html-to-text.js"
+		},
+		"./template": {
+			"types": "./dist/template.d.ts",
+			"import": "./dist/template.mjs",
+			"require": "./dist/template.js"
+		},
+		"./builder": {
+			"types": "./dist/builder.d.ts",
+			"import": "./dist/builder.mjs",
+			"require": "./dist/builder.js"
+		}
+	},
 	"keywords": [
 		"cloudflare",
 		"workers",

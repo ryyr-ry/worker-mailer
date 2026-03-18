@@ -14,96 +14,67 @@ function containsControlChar(str: string): boolean {
 }
 
 export function validateEmail(address: string): ValidationResult {
-	if (address === "") {
-		return { valid: false, reason: "メールアドレスが空です" }
-	}
-
+	if (address === "") return { valid: false, reason: "Email address is empty" }
 	if (address.length > MAX_TOTAL_LENGTH) {
 		return {
 			valid: false,
-			reason: `メールアドレスが長すぎます（${address.length}文字、上限${MAX_TOTAL_LENGTH}文字）`,
+			reason: `Email address is too long (${address.length} chars, max ${MAX_TOTAL_LENGTH})`,
 		}
 	}
-
-	if (containsControlChar(address)) {
-		return { valid: false, reason: "メールアドレスに制御文字が含まれています" }
-	}
+	if (containsControlChar(address))
+		return { valid: false, reason: "Email address contains control characters" }
 
 	const atIndex = address.lastIndexOf("@")
-	if (atIndex === -1) {
-		return { valid: false, reason: "メールアドレスに @ が含まれていません" }
-	}
+	if (atIndex === -1) return { valid: false, reason: "Email address does not contain @" }
 
 	const localPart = address.slice(0, atIndex)
 	const domainPart = address.slice(atIndex + 1)
 
-	if (localPart === "") {
-		return { valid: false, reason: "ローカル部分が空です" }
-	}
+	return validateLocalPart(localPart) ?? validateDomainPart(domainPart) ?? { valid: true }
+}
 
-	if (localPart.length > MAX_LOCAL_LENGTH) {
+function validateLocalPart(local: string): ValidationResult | undefined {
+	if (local === "") return { valid: false, reason: "Local part is empty" }
+	if (local.length > MAX_LOCAL_LENGTH) {
 		return {
 			valid: false,
-			reason: `ローカル部分が長すぎます（${localPart.length}文字、上限${MAX_LOCAL_LENGTH}文字）`,
+			reason: `Local part is too long (${local.length} chars, max ${MAX_LOCAL_LENGTH})`,
 		}
 	}
-
-	if (localPart.startsWith(".")) {
-		return { valid: false, reason: "ローカル部分がドットで始まっています" }
+	if (!local.startsWith('"') && local.includes("@")) {
+		return { valid: false, reason: "Local part contains unquoted @" }
 	}
+	if (local.startsWith(".")) return { valid: false, reason: "Local part starts with a dot" }
+	if (local.endsWith(".")) return { valid: false, reason: "Local part ends with a dot" }
+	if (local.includes("..")) return { valid: false, reason: "Local part contains consecutive dots" }
+}
 
-	if (localPart.endsWith(".")) {
-		return { valid: false, reason: "ローカル部分がドットで終わっています" }
-	}
-
-	if (localPart.includes("..")) {
-		return { valid: false, reason: "ローカル部分に連続するドットが含まれています" }
-	}
-
-	if (domainPart === "") {
-		return { valid: false, reason: "ドメイン部分が空です" }
-	}
-
-	if (domainPart.length > MAX_DOMAIN_LENGTH) {
+function validateDomainPart(domain: string): ValidationResult | undefined {
+	if (domain === "") return { valid: false, reason: "Domain part is empty" }
+	if (domain.length > MAX_DOMAIN_LENGTH) {
 		return {
 			valid: false,
-			reason: `ドメイン部分が長すぎます（${domainPart.length}文字、上限${MAX_DOMAIN_LENGTH}文字）`,
+			reason: `Domain part is too long (${domain.length} chars, max ${MAX_DOMAIN_LENGTH})`,
 		}
 	}
-
-	if (domainPart.startsWith(".")) {
-		return { valid: false, reason: "ドメイン部分がドットで始まっています" }
-	}
-
-	if (domainPart.endsWith(".")) {
-		return { valid: false, reason: "ドメイン部分がドットで終わっています" }
-	}
-
-	if (domainPart.includes("..")) {
-		return { valid: false, reason: "ドメイン部分に連続するドットが含まれています" }
-	}
-
-	if (!domainPart.includes(".")) {
-		return {
-			valid: false,
-			reason: "ドメイン部分にドットが含まれていません（TLDが必要です）",
-		}
-	}
-
-	const labels = domainPart.split(".")
-	for (const label of labels) {
-		if (label === "") {
-			return { valid: false, reason: "ドメイン部分に空のラベルが含まれています" }
-		}
+	if (domain.startsWith(".")) return { valid: false, reason: "Domain part starts with a dot" }
+	if (domain.endsWith(".")) return { valid: false, reason: "Domain part ends with a dot" }
+	if (domain.includes(".."))
+		return { valid: false, reason: "Domain part contains consecutive dots" }
+	if (!domain.includes("."))
+		return { valid: false, reason: "Domain part does not contain a dot (TLD required)" }
+	for (const label of domain.split(".")) {
+		if (label === "") return { valid: false, reason: "Domain part contains an empty label" }
 		if (label.length > MAX_LABEL_LENGTH) {
 			return {
 				valid: false,
-				reason: `ドメインラベル "${label}" が長すぎます（${label.length}文字、上限${MAX_LABEL_LENGTH}文字）`,
+				reason: `Domain label "${label}" is too long (${label.length} chars, max ${MAX_LABEL_LENGTH})`,
 			}
 		}
+		if (label.startsWith("-") || label.endsWith("-")) {
+			return { valid: false, reason: `Domain label "${label}" starts or ends with a hyphen` }
+		}
 	}
-
-	return { valid: true }
 }
 
 export function validateEmailBatch(addresses: string[]): Map<string, ValidationResult> {

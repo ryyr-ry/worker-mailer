@@ -1,298 +1,98 @@
-import { connect } from "cloudflare:sockets"
-import { beforeEach, describe, expect, it, type Mock, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { sendBatch } from "../../src/batch"
-import type { EmailOptions } from "../../src/email"
-import { WorkerMailer } from "../../src/mailer"
+import type { EmailOptions } from "../../src/email/types"
+import type { Mailer } from "../../src/mailer"
+import type { SendResult } from "../../src/result"
 
-vi.mock("cloudflare:sockets", () => ({
-	connect: vi.fn(),
-}))
+function makeMockMailer(results: Array<SendResult | Error>): Mailer {
+let callIndex = 0
+return {
+send: vi.fn(async () => {
+const r = results[callIndex++]
+if (r instanceof Error) throw r
+return r
+}),
+close: vi.fn(async () => {}),
+ping: vi.fn(async () => true),
+[Symbol.asyncDispose]: vi.fn(async () => {}),
+} as unknown as Mailer
+}
+
+function makeResult(id: string): SendResult {
+return { messageId: id, accepted: [], rejected: [], responseTime: 0, response: "250 OK" }
+}
+
+const email1: EmailOptions = { from: "a@b.com", to: "c@d.com", subject: "1" }
+const email2: EmailOptions = { from: "a@b.com", to: "e@f.com", subject: "2" }
+const email3: EmailOptions = { from: "a@b.com", to: "g@h.com", subject: "3" }
 
 describe("sendBatch", () => {
-	interface MockReader {
-		read: Mock
-		releaseLock: Mock
-	}
-	interface MockWriter {
-		write: Mock
-		releaseLock: Mock
-	}
-	interface MockSocket {
-		readable: { getReader: () => MockReader }
-		writable: { getWriter: () => MockWriter }
-		opened: Promise<void>
-		close: Mock
-		startTls: Mock
-	}
+it("sends all emails and returns results", async () => {
+const mailer = makeMockMailer([makeResult("1"), makeResult("2")])
+const results = await sendBatch(mailer, [email1, email2])
+expect(results).toHaveLength(2)
+expect(results[0].success).toBe(true)
+expect(results[1].success).toBe(true)
+})
 
-	let mockSocket: MockSocket
-	let mockReader: MockReader
-	let mockWriter: MockWriter
+it("continueOnError=true: one fails, rest continue", async () => {
+const mailer = makeMockMailer([new Error("fail"), makeResult("2")])
+const results = await sendBatch(mailer, [email1, email2], { continueOnError: true })
+expect(results).toHaveLength(2)
+expect(results[0].success).toBe(false)
+expect(results[0].error?.message).toBe("fail")
+expect(results[1].success).toBe(true)
+})
 
-	function setupConnectionMocks() {
-		mockReader.read
-			.mockResolvedValueOnce({
-				value: new TextEncoder().encode("220 smtp.example.com ready\r\n"),
-			})
-			.mockResolvedValueOnce({
-				value: new TextEncoder().encode(
-					"250-smtp.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 AUTH=PLAIN LOGIN\r\n",
-				),
-			})
-			.mockResolvedValueOnce({
-				value: new TextEncoder().encode("235 Authentication successful\r\n"),
-			})
-	}
+it("continueOnError=false: stops on first error", async () => {
+const mailer = makeMockMailer([new Error("fail"), makeResult("2")])
+const results = await sendBatch(mailer, [email1, email2], { continueOnError: false })
+expect(results).toHaveLength(1)
+expect(results[0].success).toBe(false)
+})
 
-	function setupSendSuccess() {
-		mockReader.read
-			.mockResolvedValueOnce({
-				value: new TextEncoder().encode("250 Sender OK\r\n"),
-			})
-			.mockResolvedValueOnce({
-				value: new TextEncoder().encode("250 Recipient OK\r\n"),
-			})
-			.mockResolvedValueOnce({
-				value: new TextEncoder().encode("354 Start mail input\r\n"),
-			})
-			.mockResolvedValueOnce({
-				value: new TextEncoder().encode("250 Message accepted\r\n"),
-			})
-	}
+it("empty email array returns empty results", async () => {
+const mailer = makeMockMailer([])
+const results = await sendBatch(mailer, [])
+expect(results).toHaveLength(0)
+})
 
-	function setupSendFailure() {
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("550 Rejected\r\n"),
-		})
-	}
+it("single email works", async () => {
+const mailer = makeMockMailer([makeResult("only")])
+const results = await sendBatch(mailer, [email1])
+expect(results).toHaveLength(1)
+expect(results[0].result?.messageId).toBe("only")
+})
 
-	const connectionOptions = {
-		host: "smtp.example.com",
-		port: 587,
-		credentials: { username: "user", password: "pass" },
-		authType: ["plain"] as const,
-		maxRetries: 0,
-	}
+it("all fail: all results have success=false", async () => {
+const mailer = makeMockMailer([new Error("e1"), new Error("e2")])
+const results = await sendBatch(mailer, [email1, email2])
+expect(results.every((r) => !r.success)).toBe(true)
+})
 
-	const makeEmail = (subject: string): EmailOptions => ({
-		from: "sender@example.com",
-		to: "recipient@example.com",
-		subject,
-		text: "Hello",
-	})
+it("error in result preserves original Error instance", async () => {
+const err = new Error("specific")
+const mailer = makeMockMailer([err])
+const results = await sendBatch(mailer, [email1])
+expect(results[0].error).toBe(err)
+})
 
-	beforeEach(() => {
-		vi.clearAllMocks()
+it("concurrency > 1 still processes all emails", async () => {
+const mailer = makeMockMailer([makeResult("1"), makeResult("2"), makeResult("3")])
+const results = await sendBatch(mailer, [email1, email2, email3], { concurrency: 2 })
+expect(results).toHaveLength(3)
+expect(results.every((r) => r.success)).toBe(true)
+})
 
-		mockReader = {
-			read: vi.fn(),
-			releaseLock: vi.fn(),
-		}
-		mockWriter = {
-			write: vi.fn(),
-			releaseLock: vi.fn(),
-		}
-		mockSocket = {
-			readable: { getReader: () => mockReader },
-			writable: { getWriter: () => mockWriter },
-			opened: Promise.resolve(),
-			close: vi.fn(),
-			startTls: vi.fn().mockReturnValue({
-				readable: { getReader: () => mockReader },
-				writable: { getWriter: () => mockWriter },
-			}),
-		}
+it("result contains original email reference", async () => {
+const mailer = makeMockMailer([makeResult("1")])
+const results = await sendBatch(mailer, [email1])
+expect(results[0].email).toBe(email1)
+})
 
-		vi.mocked(connect).mockReturnValue(mockSocket as unknown as ReturnType<typeof connect>)
-	})
-
-	it("複数メール送信が全成功するケース", async () => {
-		setupConnectionMocks()
-		setupSendSuccess()
-		setupSendSuccess()
-		setupSendSuccess()
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("221 Bye\r\n"),
-		})
-
-		const mailer = await WorkerMailer.connect(connectionOptions)
-
-		const emails = [makeEmail("Email 1"), makeEmail("Email 2"), makeEmail("Email 3")]
-		const results = await sendBatch(mailer, emails)
-
-		expect(results).toHaveLength(3)
-		for (const r of results) {
-			expect(r.success).toBe(true)
-			expect(r.result).toBeDefined()
-			expect(r.result?.response).toContain("250")
-			expect(r.error).toBeUndefined()
-		}
-
-		await mailer.close()
-	})
-
-	it("一部失敗するケース（continueOnError: true）", async () => {
-		setupConnectionMocks()
-		// 1通目: 成功
-		setupSendSuccess()
-		// 2通目: MAIL FROM 失敗 + RSET成功
-		setupSendFailure()
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("250 OK\r\n"),
-		})
-		// 3通目: 成功
-		setupSendSuccess()
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("221 Bye\r\n"),
-		})
-
-		const mailer = await WorkerMailer.connect(connectionOptions)
-
-		const emails = [makeEmail("Email 1"), makeEmail("Email 2"), makeEmail("Email 3")]
-		const results = await sendBatch(mailer, emails, { continueOnError: true })
-
-		expect(results).toHaveLength(3)
-		expect(results[0].success).toBe(true)
-		expect(results[0].result).toBeDefined()
-		expect(results[1].success).toBe(false)
-		expect(results[1].error).toBeDefined()
-		expect(results[2].success).toBe(true)
-		expect(results[2].result).toBeDefined()
-
-		await mailer.close()
-	})
-
-	it("全停止するケース（continueOnError: false）", async () => {
-		setupConnectionMocks()
-		// 1通目: 成功
-		setupSendSuccess()
-		// 2通目: MAIL FROM 失敗 + RSET成功
-		setupSendFailure()
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("250 OK\r\n"),
-		})
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("221 Bye\r\n"),
-		})
-
-		const mailer = await WorkerMailer.connect(connectionOptions)
-
-		const emails = [makeEmail("Email 1"), makeEmail("Email 2"), makeEmail("Email 3")]
-		const results = await sendBatch(mailer, emails, { continueOnError: false })
-
-		expect(results).toHaveLength(2)
-		expect(results[0].success).toBe(true)
-		expect(results[1].success).toBe(false)
-		expect(results[1].error).toBeDefined()
-
-		await mailer.close()
-	})
-
-	it("空リストのケース", async () => {
-		setupConnectionMocks()
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("221 Bye\r\n"),
-		})
-
-		const mailer = await WorkerMailer.connect(connectionOptions)
-
-		const results = await sendBatch(mailer, [])
-
-		expect(results).toHaveLength(0)
-
-		await mailer.close()
-	})
-
-	it("concurrency: 1 が逐次送信と同じ結果を返すこと", async () => {
-		setupConnectionMocks()
-		setupSendSuccess()
-		setupSendSuccess()
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("221 Bye\r\n"),
-		})
-
-		const mailer = await WorkerMailer.connect(connectionOptions)
-
-		const emails = [makeEmail("Email 1"), makeEmail("Email 2")]
-		const results = await sendBatch(mailer, emails, { concurrency: 1 })
-
-		expect(results).toHaveLength(2)
-		for (const r of results) {
-			expect(r.success).toBe(true)
-			expect(r.result).toBeDefined()
-			expect(r.result?.response).toContain("250")
-		}
-
-		await mailer.close()
-	})
-
-	it("concurrency: 2 で複数メールが送信されること", async () => {
-		setupConnectionMocks()
-		setupSendSuccess()
-		setupSendSuccess()
-		setupSendSuccess()
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("221 Bye\r\n"),
-		})
-
-		const mailer = await WorkerMailer.connect(connectionOptions)
-
-		const emails = [makeEmail("Email 1"), makeEmail("Email 2"), makeEmail("Email 3")]
-		const results = await sendBatch(mailer, emails, { concurrency: 2 })
-
-		expect(results).toHaveLength(3)
-		for (const r of results) {
-			expect(r.success).toBe(true)
-			expect(r.result).toBeDefined()
-		}
-
-		await mailer.close()
-	})
-
-	it("concurrency がメール数を超える場合でも正常に動作すること", async () => {
-		setupConnectionMocks()
-		setupSendSuccess()
-		setupSendSuccess()
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("221 Bye\r\n"),
-		})
-
-		const mailer = await WorkerMailer.connect(connectionOptions)
-
-		const emails = [makeEmail("Email 1"), makeEmail("Email 2")]
-		const results = await sendBatch(mailer, emails, { concurrency: 10 })
-
-		expect(results).toHaveLength(2)
-		for (const r of results) {
-			expect(r.success).toBe(true)
-		}
-
-		await mailer.close()
-	})
-
-	it("concurrency 指定時に continueOnError: false で中断されること", async () => {
-		setupConnectionMocks()
-		setupSendSuccess()
-		setupSendFailure()
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("250 OK\r\n"),
-		})
-		mockReader.read.mockResolvedValueOnce({
-			value: new TextEncoder().encode("221 Bye\r\n"),
-		})
-
-		const mailer = await WorkerMailer.connect(connectionOptions)
-
-		const emails = [makeEmail("Email 1"), makeEmail("Email 2"), makeEmail("Email 3")]
-		const results = await sendBatch(mailer, emails, {
-			concurrency: 2,
-			continueOnError: false,
-		})
-
-		expect(results.length).toBeLessThanOrEqual(3)
-		const failed = results.filter((r) => !r.success)
-		expect(failed.length).toBeGreaterThanOrEqual(1)
-
-		await mailer.close()
-	})
+it("default continueOnError is true", async () => {
+const mailer = makeMockMailer([new Error("fail"), makeResult("2")])
+const results = await sendBatch(mailer, [email1, email2])
+expect(results).toHaveLength(2)
+})
 })

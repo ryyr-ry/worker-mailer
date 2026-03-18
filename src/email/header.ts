@@ -1,4 +1,16 @@
 import { encode } from "../utils"
+import type { User } from "./types"
+
+const PROTECTED_HEADERS = new Set([
+	"from",
+	"to",
+	"cc",
+	"bcc",
+	"subject",
+	"date",
+	"message-id",
+	"mime-version",
+])
 
 function isAsciiOnly(text: string): boolean {
 	for (let i = 0; i < text.length; i++) {
@@ -34,12 +46,16 @@ export function encodeHeader(text: string): string {
 		}
 
 		const isUtf8LeadByte = (byte & 0xc0) !== 0x80
-		if (current.length + fragment.length > maxPayload && isUtf8LeadByte) {
-			words.push(`${prefix}${current}${suffix}`)
-			current = fragment
-		} else {
-			current += fragment
+		if (isUtf8LeadByte && current.length > 0) {
+			const contBytes = byte >= 0xf0 ? 3 : byte >= 0xe0 ? 2 : byte >= 0xc0 ? 1 : 0
+			const charEncodedLen = fragment.length + contBytes * 3
+			if (current.length + charEncodedLen > maxPayload) {
+				words.push(`${prefix}${current}${suffix}`)
+				current = fragment
+				continue
+			}
 		}
+		current += fragment
 	}
 	if (current.length > 0) {
 		words.push(`${prefix}${current}${suffix}`)
@@ -79,4 +95,35 @@ export function foldHeaderLine(line: string, maxLen = 78): string {
 		parts.push(remaining)
 	}
 	return parts.join("\r\n")
+}
+
+function formatUserAddress(user: User): string {
+	if (user.name) return `"${encodeHeader(user.name)}" <${user.email}>`
+	return user.email
+}
+
+export function resolveHeaders(params: {
+	from: User
+	to: User[]
+	cc?: User[]
+	reply?: User
+	subject: string
+	headers: Record<string, string>
+}): void {
+	const { from, to, cc, reply, subject, headers } = params
+
+	for (const key of Object.keys(headers)) {
+		if (PROTECTED_HEADERS.has(key.toLowerCase())) {
+			delete headers[key]
+		}
+	}
+
+	if (!headers.From) headers.From = formatUserAddress(from)
+	if (!headers.To) headers.To = to.map(formatUserAddress).join(", ")
+	if (!headers["Reply-To"] && reply) headers["Reply-To"] = formatUserAddress(reply)
+	if (!headers.CC && cc) headers.CC = cc.map(formatUserAddress).join(", ")
+	if (!headers.Subject && subject) headers.Subject = encodeHeader(subject)
+	headers.Date = headers.Date ?? new Date().toUTCString().replace("GMT", "+0000")
+	headers["Message-ID"] =
+		headers["Message-ID"] ?? `<${crypto.randomUUID()}@${from.email.split("@").pop()}>`
 }

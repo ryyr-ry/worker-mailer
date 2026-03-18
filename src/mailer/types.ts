@@ -1,4 +1,8 @@
+import type { DkimOptions } from "../dkim"
+import type { DsnOptions, EmailOptions } from "../email/types"
+import { WorkerMailerError } from "../errors"
 import type { LogLevel } from "../logger"
+import type { SendResult } from "../result"
 
 export type AuthType = "plain" | "login" | "cram-md5"
 
@@ -7,10 +11,30 @@ export type Credentials = {
 	password: string
 }
 
-export type DsnOptions = {
-	envelopeId?: string
-	RET?: { HEADERS?: boolean; FULL?: boolean }
-	NOTIFY?: { DELAY?: boolean; FAILURE?: boolean; SUCCESS?: boolean }
+export interface Mailer {
+	send(options: EmailOptions): Promise<SendResult>
+	close(): Promise<void>
+	ping(): Promise<boolean>
+	[Symbol.asyncDispose](): Promise<void>
+}
+
+export type SendHooks = {
+	beforeSend?: (
+		email: EmailOptions,
+	) => Promise<EmailOptions | false | undefined> | EmailOptions | false | undefined
+	afterSend?: (email: EmailOptions, result: SendResult) => Promise<void> | void
+	onSendError?: (email: EmailOptions, error: Error) => Promise<void> | void
+	onConnected?: (info: { host: string; port: number }) => void
+	onDisconnected?: (info: { reason?: string }) => void
+	onReconnecting?: (info: { attempt: number }) => void
+	onFatalError?: (error: Error) => void
+}
+
+export class SendCancelledError extends WorkerMailerError {
+	readonly name = "SendCancelledError" as const
+	constructor() {
+		super("Send cancelled by beforeSend hook")
+	}
 }
 
 export type WorkerMailerOptions = {
@@ -18,32 +42,18 @@ export type WorkerMailerOptions = {
 	port: number
 	secure?: boolean
 	startTls?: boolean
-	credentials?: Credentials
-	authType?: AuthType | AuthType[]
+	username?: string
+	password?: string
+	authType?: AuthType[]
 	logLevel?: LogLevel
-	dsn?:
-		| {
-				RET?:
-					| {
-							HEADERS?: boolean
-							FULL?: boolean
-					  }
-					| undefined
-				NOTIFY?:
-					| {
-							DELAY?: boolean
-							FAILURE?: boolean
-							SUCCESS?: boolean
-					  }
-					| undefined
-		  }
-		| undefined
+	dsn?: Omit<DsnOptions, "envelopeId">
 	socketTimeoutMs?: number
 	responseTimeoutMs?: number
 	ehloHostname?: string
 	maxRetries?: number
 	autoReconnect?: boolean
-	onError?: (error: Error) => void
+	hooks?: SendHooks
+	dkim?: DkimOptions
 }
 
 export type SmtpCapabilities = {
@@ -51,4 +61,13 @@ export type SmtpCapabilities = {
 	allowAuth: boolean
 	authTypeSupported: AuthType[]
 	supportsStartTls: boolean
+	supportsSmtpUtf8: boolean
+}
+
+export const emptyCapabilities: SmtpCapabilities = {
+	supportsDSN: false,
+	allowAuth: false,
+	authTypeSupported: [],
+	supportsStartTls: false,
+	supportsSmtpUtf8: false,
 }
