@@ -1,6 +1,9 @@
 {
-	"name": "worker-mailer",
-	"version": "1.2.1",
+	"name": "@ryyr/worker-mailer",
+	"version": "0.1.0",
+	"publishConfig": {
+		"access": "public"
+	},
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.ts",
