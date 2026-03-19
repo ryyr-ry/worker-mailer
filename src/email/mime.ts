@@ -128,97 +128,49 @@ function buildMultipart(type: "mixed" | "alternative" | "related", parts: string
 	return `${header}\r\n\r\n${body}\r\n--${boundary}--`
 }
 
-function buildContentBody(params: MimeMessageParams): string {
+type MimeStructure = {
+	contentParts: string[]
+	attachments: string[]
+}
+
+function resolveMimeStructure(params: MimeMessageParams): MimeStructure {
 	const { text, html, attachments, inlineAttachments, calendarEvent } = params
-	const hasText = text !== undefined
-	const hasHtml = html !== undefined
 	const hasInline = inlineAttachments !== undefined && inlineAttachments.length > 0
-	const hasAttach = attachments !== undefined && attachments.length > 0
-	const hasCal = calendarEvent !== undefined
-	const htmlPart = hasHtml ? buildHtmlPart(html) : ""
-	const textPart = hasText ? buildTextPart(text) : ""
-	const inlines = hasInline && inlineAttachments ? inlineAttachments.map(buildInlinePart) : []
-	const attaches = hasAttach && attachments ? attachments.map(buildAttachmentPart) : []
-	const calPart = hasCal ? buildCalendarPart(calendarEvent) : ""
-	const related = hasInline ? buildMultipart("related", [htmlPart, ...inlines]) : htmlPart
-	const htmlOrRelated = hasInline ? related : htmlPart
-	if (!hasHtml && !hasAttach && !hasCal && hasText) return textPart
-	if (!hasText && hasHtml && !hasAttach && !hasInline && !hasCal) return htmlPart
-	if (!hasText && hasHtml && hasInline && !hasAttach && !hasCal) return related
-	return buildWithAttachAndCal({
-		hasText,
-		hasHtml,
-		hasInline,
-		hasAttach,
-		hasCal,
-		textPart,
-		htmlOrRelated,
-		htmlPart,
-		calPart,
-		attaches,
-	})
+
+	const contentParts: string[] = []
+	if (text !== undefined) contentParts.push(buildTextPart(text))
+	if (html !== undefined) {
+		const htmlPart = buildHtmlPart(html)
+		const inlines = hasInline ? inlineAttachments.map(buildInlinePart) : []
+		contentParts.push(
+			hasInline ? buildMultipart("related", [htmlPart, ...inlines]) : htmlPart,
+		)
+	}
+	if (calendarEvent !== undefined) {
+		contentParts.push(buildCalendarPart(calendarEvent))
+	}
+
+	const attaches =
+		attachments !== undefined && attachments.length > 0
+			? attachments.map(buildAttachmentPart)
+			: []
+
+	return { contentParts, attachments: attaches }
 }
 
-type ContentBuildContext = {
-	hasText: boolean
-	hasHtml: boolean
-	hasInline: boolean
-	hasAttach: boolean
-	hasCal: boolean
-	textPart: string
-	htmlOrRelated: string
-	htmlPart: string
-	calPart: string
-	attaches: string[]
+function assembleMimeBody(structure: MimeStructure): string {
+	const { contentParts, attachments } = structure
+	if (contentParts.length === 0) return ""
+	const base =
+		contentParts.length === 1
+			? contentParts[0]
+			: buildMultipart("alternative", contentParts)
+	if (attachments.length === 0) return base
+	return buildMultipart("mixed", [base, ...attachments])
 }
 
-function buildWithAttachAndCal(ctx: ContentBuildContext): string {
-	const altParts = buildAltParts(ctx)
-
-	if (ctx.hasText && ctx.hasHtml && !ctx.hasAttach) {
-		return buildMultipart("alternative", altParts)
-	}
-	if (ctx.hasText && !ctx.hasHtml && ctx.hasAttach && !ctx.hasCal) {
-		return buildMultipart("mixed", [ctx.textPart, ...ctx.attaches])
-	}
-	if (ctx.hasText && !ctx.hasHtml && ctx.hasAttach && ctx.hasCal) {
-		const alt = buildMultipart("alternative", [ctx.textPart, ctx.calPart])
-		return buildMultipart("mixed", [alt, ...ctx.attaches])
-	}
-	if (ctx.hasText && !ctx.hasHtml && !ctx.hasAttach && ctx.hasCal) {
-		return buildMultipart("alternative", [ctx.textPart, ctx.calPart])
-	}
-	if (!ctx.hasText && ctx.hasHtml && !ctx.hasInline && ctx.hasAttach) {
-		const base = ctx.hasCal
-			? buildMultipart("alternative", [ctx.htmlPart, ctx.calPart])
-			: ctx.htmlPart
-		return buildMultipart("mixed", [base, ...ctx.attaches])
-	}
-	if (!ctx.hasText && ctx.hasHtml && ctx.hasInline && ctx.hasAttach) {
-		const base = ctx.hasCal
-			? buildMultipart("alternative", [ctx.htmlOrRelated, ctx.calPart])
-			: ctx.htmlOrRelated
-		return buildMultipart("mixed", [base, ...ctx.attaches])
-	}
-	if (ctx.hasText && ctx.hasHtml && ctx.hasAttach) {
-		const alt = buildMultipart("alternative", altParts)
-		return buildMultipart("mixed", [alt, ...ctx.attaches])
-	}
-	if (!ctx.hasText && ctx.hasHtml && !ctx.hasAttach && ctx.hasCal) {
-		const htmlContent = ctx.hasInline ? ctx.htmlOrRelated : ctx.htmlPart
-		return buildMultipart("alternative", [htmlContent, ctx.calPart])
-	}
-	if (ctx.hasText) return ctx.textPart
-	if (ctx.hasHtml) return ctx.htmlPart
-	return ""
-}
-
-function buildAltParts(ctx: ContentBuildContext): string[] {
-	const parts: string[] = []
-	if (ctx.hasText) parts.push(ctx.textPart)
-	if (ctx.hasHtml) parts.push(ctx.hasInline ? ctx.htmlOrRelated : ctx.htmlPart)
-	if (ctx.hasCal) parts.push(ctx.calPart)
-	return parts
+function buildContentBody(params: MimeMessageParams): string {
+	return assembleMimeBody(resolveMimeStructure(params))
 }
 
 export function buildMimeMessage(params: MimeMessageParams): string {

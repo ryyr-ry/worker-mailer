@@ -8,7 +8,7 @@ import {
 	selectDefaultHeaders,
 } from "./dkim-canonicalize"
 import { DkimError } from "./errors"
-import { arrayBufferToBase64, encode } from "./utils"
+import { arrayBufferToBase64, encode, fromBase64ToBytes } from "./utils"
 
 export {
 	canonicalizeRelaxedBody,
@@ -53,14 +53,10 @@ export async function importDkimKey(pem: string): Promise<CryptoKey> {
 		.replace(/-----END PRIVATE KEY-----/, "")
 		.replace(/\s/g, "")
 	if (!pemBody) throw new DkimError("[DKIM] Private key PEM is empty or invalid")
-	const binaryString = atob(pemBody)
-	const bytes = new Uint8Array(binaryString.length)
-	for (let i = 0; i < binaryString.length; i++) {
-		bytes[i] = binaryString.charCodeAt(i)
-	}
+	const bytes = fromBase64ToBytes(pemBody)
 	return crypto.subtle.importKey(
 		"pkcs8",
-		bytes.buffer,
+		bytes.buffer as ArrayBuffer,
 		{ name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
 		false,
 		["sign"],

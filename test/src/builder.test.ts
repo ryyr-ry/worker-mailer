@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest"
 import { MailBuilder } from "../../src/builder"
+import { EmailValidationError } from "../../src/errors"
 
 describe("MailBuilder", () => {
-const minimal = () => new MailBuilder().from("a@b.com").to("c@d.com").subject("Hi")
+const minimal = () => new MailBuilder().from("a@b.com").to("c@d.com").subject("Hi").text("body")
 
 it("method chaining returns same instance", () => {
 const b = new MailBuilder()
@@ -55,23 +56,28 @@ const opts = minimal().replyTo("reply@x.com").build()
 expect(opts.reply).toBe("reply@x.com")
 })
 
-it("build() without from throws Error", () => {
-expect(() => new MailBuilder().to("c@d.com").subject("Hi").build())
-.toThrow("from is required")
+it("build() without from throws EmailValidationError", () => {
+expect(() => new MailBuilder().to("c@d.com").subject("Hi").text("body").build())
+.toThrow(EmailValidationError)
 })
 
-it("build() without to throws Error", () => {
-expect(() => new MailBuilder().from("a@b.com").subject("Hi").build())
-.toThrow("to is required")
+it("build() without to throws EmailValidationError", () => {
+expect(() => new MailBuilder().from("a@b.com").subject("Hi").text("body").build())
+.toThrow(EmailValidationError)
 })
 
-it("build() without subject throws Error", () => {
-expect(() => new MailBuilder().from("a@b.com").to("c@d.com").build())
-.toThrow("subject is required")
+it("build() without subject throws EmailValidationError", () => {
+expect(() => new MailBuilder().from("a@b.com").to("c@d.com").text("body").build())
+.toThrow(EmailValidationError)
+})
+
+it("build() without text or html throws EmailValidationError", () => {
+expect(() => new MailBuilder().from("a@b.com").to("c@d.com").subject("S").build())
+.toThrow(EmailValidationError)
 })
 
 it("multiple to() recipients via varargs", () => {
-const opts = new MailBuilder().from("a@b.com").to("a@a.com", "b@b.com").subject("Hi").build()
+const opts = new MailBuilder().from("a@b.com").to("a@a.com", "b@b.com").subject("Hi").text("body").build()
 expect(opts.to).toEqual(["a@a.com", "b@b.com"])
 })
 })

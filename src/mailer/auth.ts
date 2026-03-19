@@ -1,6 +1,6 @@
 import { SmtpAuthError } from "../errors"
 import type Logger from "../logger"
-import { encode, toBase64 } from "../utils"
+import { encode, fromBase64, toBase64 } from "../utils"
 import type { SmtpTransport } from "./transport"
 import type { AuthType, Credentials, SmtpCapabilities } from "./types"
 
@@ -94,7 +94,7 @@ async function authCramMd5(
 		)
 	}
 
-	const challenge = atob(challengeWithBase64Encoded)
+	const challenge = fromBase64(challengeWithBase64Encoded)
 
 	const keyData = encode(credentials.password)
 	const key = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "MD5" }, false, [

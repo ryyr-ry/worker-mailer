@@ -128,6 +128,9 @@ export function buildNotify(dsnGlobal?: DsnParam, dsnOverride?: DsnOptions): str
 export function buildRet(dsnGlobal?: DsnParam, dsnOverride?: DsnOptions): string {
 	const ret = dsnOverride?.RET ?? dsnGlobal?.RET
 	if (!ret) return ""
+	if (ret.FULL && ret.HEADERS) {
+		throw new ConfigurationError("RET cannot specify both FULL and HEADERS (RFC 3461)")
+	}
 	if (ret.FULL) return "RET=FULL"
 	if (ret.HEADERS) return "RET=HDRS"
 	return ""

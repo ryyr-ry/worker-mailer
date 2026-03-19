@@ -36,7 +36,12 @@ export function createCalendarEvent(options: CalendarEventOptions): CalendarEven
 
 	if (options.location) lines.push(`LOCATION:${escapeIcalText(options.location)}`)
 	if (options.description) lines.push(`DESCRIPTION:${escapeIcalText(options.description)}`)
-	if (options.url) lines.push(`URL:${options.url.replace(/[\r\n]/g, "")}`)
+	if (options.url) {
+		if (/[\r\n]/.test(options.url)) {
+			throw new CalendarValidationError("[Calendar] URL must not contain CR or LF characters")
+		}
+		lines.push(`URL:${options.url}`)
+	}
 
 	lines.push(`DTSTAMP:${formatDateUtc(new Date())}`)
 
@@ -61,7 +66,10 @@ function validateCalendarOptions(options: CalendarEventOptions): void {
 }
 
 function sanitizeEmail(email: string): string {
-	return email.replace(/[\r\n]/g, "")
+	if (/[\r\n]/.test(email)) {
+		throw new CalendarValidationError("[Calendar] Email must not contain CR or LF characters")
+	}
+	return email
 }
 
 function appendOrganizer(lines: string[], organizer: { name?: string; email: string }): void {
