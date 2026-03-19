@@ -1,21 +1,21 @@
 /**
- * HTMLからプレーンテキストへの変換
- * メールのtext/plain部分を自動生成する
+ * HTML to plain text conversion
+ * Auto-generates the text/plain part of an email
  */
 
 export type HtmlToTextOptions = {
-	/** 行の折り返し文字数（falseで折り返し無効、デフォルト: 78） */
+	/** Line wrap character count (false to disable wrapping, default: 78) */
 	wordwrap?: number | false
-	/** リンクのURLを保持するか（デフォルト: true） */
+	/** Whether to preserve link URLs (default: true) */
 	preserveLinks?: boolean
 }
 
 /**
- * HTMLをプレーンテキストに変換する
+ * Converts HTML to plain text
  *
- * @param html - 変換するHTML文字列
- * @param options - 変換オプション
- * @returns プレーンテキスト
+ * @param html - HTML string to convert
+ * @param options - Conversion options
+ * @returns Plain text
  */
 export function htmlToText(html: string, options?: HtmlToTextOptions): string {
 	const preserveLinks = options?.preserveLinks ?? true

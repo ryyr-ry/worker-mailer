@@ -128,6 +128,9 @@ export function buildNotify(dsnGlobal?: DsnParam, dsnOverride?: DsnOptions): str
 export function buildRet(dsnGlobal?: DsnParam, dsnOverride?: DsnOptions): string {
 	const ret = dsnOverride?.RET ?? dsnGlobal?.RET
 	if (!ret) return ""
+	if (ret.FULL && ret.HEADERS) {
+		throw new ConfigurationError("RET cannot specify both FULL and HEADERS (RFC 3461)")
+	}
 	if (ret.FULL) return "RET=FULL"
 	if (ret.HEADERS) return "RET=HDRS"
 	return ""
@@ -136,7 +139,7 @@ export function buildRet(dsnGlobal?: DsnParam, dsnOverride?: DsnOptions): string
 // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ASCII range check
 const NON_ASCII_PATTERN = /[^\x00-\x7F]/
 
-/** メールアドレスに非ASCII文字が含まれるか判定する */
+/** Checks whether an email address contains non-ASCII characters */
 export function hasNonAscii(value: string): boolean {
 	return NON_ASCII_PATTERN.test(value)
 }

@@ -1,4 +1,4 @@
-import { ConfigurationError } from "../errors"
+import { ConfigurationError, SmtpConnectionError } from "../errors"
 import type Logger from "../logger"
 import { authenticate } from "./auth"
 import { ehlo, greet, startTls } from "./handshake"
@@ -24,11 +24,24 @@ export async function initializeSession(
 	config.logger.info("[WorkerMailer] SMTP server connected")
 	await greet(transport)
 	let capabilities = await ehlo(transport, config.ehloHostname)
-	if (config.startTlsEnabled && !config.secure && capabilities.supportsStartTls) {
+	const tlsEstablished = config.secure
+	if (config.startTlsEnabled && !config.secure) {
+		if (!capabilities.supportsStartTls) {
+			throw new SmtpConnectionError(
+				"[WorkerMailer] STARTTLS required but server does not advertise STARTTLS support",
+			)
+		}
 		await startTls(transport)
 		capabilities = await ehlo(transport, config.ehloHostname)
 	}
+	const encrypted = tlsEstablished || config.startTlsEnabled
 	if (config.credentials) {
+		if (!encrypted) {
+			throw new ConfigurationError(
+				"[WorkerMailer] Cannot send credentials over plaintext connection. " +
+					"Enable secure (port 465) or startTls (port 587) to encrypt the connection",
+			)
+		}
 		await authenticate({
 			transport,
 			credentials: config.credentials,
@@ -36,10 +49,6 @@ export async function initializeSession(
 			preferredTypes: config.authType,
 			logger: config.logger,
 		})
-	} else if (capabilities.allowAuth) {
-		throw new ConfigurationError(
-			"[WorkerMailer] Authentication required but no credentials provided",
-		)
 	}
 	return capabilities
 }

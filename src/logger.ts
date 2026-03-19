@@ -8,7 +8,7 @@ export enum LogLevel {
 
 const AUTH_CREDENTIAL_PATTERN = /AUTH (PLAIN|LOGIN)\s+\S+/gi
 const BASE64_LONG_PATTERN = /[A-Za-z0-9+/=]{64,}/g
-const STANDALONE_BASE64_PATTERN = /\n([A-Za-z0-9+/]{8,}={0,2})\r?\n/g
+const STANDALONE_BASE64_PATTERN = /(?:^|\n)([A-Za-z0-9+/]{4,}={0,2})\r?\n/g
 
 export default class Logger {
 	private readonly prefix: string
@@ -52,6 +52,9 @@ export default class Logger {
 		return message
 			.replace(AUTH_CREDENTIAL_PATTERN, "AUTH $1 [REDACTED]")
 			.replace(BASE64_LONG_PATTERN, "[REDACTED]")
-			.replace(STANDALONE_BASE64_PATTERN, "\n[REDACTED]\n")
+			.replace(STANDALONE_BASE64_PATTERN, (match) => {
+				const prefix = match.startsWith("\n") ? "\n" : ""
+				return `${prefix}[REDACTED]\n`
+			})
 	}
 }

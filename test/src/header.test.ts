@@ -102,6 +102,19 @@ expect(headers.Date).toBeTruthy()
 expect(headers.Date).toMatch(/\+0000$/)
 })
 
+it("Date header follows RFC 5322 format (deterministic, not toUTCString)", () => {
+const headers: Record<string, string> = {}
+resolveHeaders({
+from: { email: "a@b.com" },
+to: [{ email: "c@d.com" }],
+subject: "Test",
+headers,
+})
+expect(headers.Date).toMatch(
+/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} \+0000$/,
+)
+})
+
 it("populates Message-ID in <...@domain> format", () => {
 const headers: Record<string, string> = {}
 resolveHeaders({

@@ -63,9 +63,29 @@ it("{{#array}}...{{/array}} with empty array renders nothing", () => {
 expect(render("{{#items}}x{{/items}}", { items: [] })).toBe("")
 })
 
-it("nested sections", () => {
-const tpl = "{{#a}}{{#b}}AB{{/b}}{{/a}}"
-expect(render(tpl, { a: true, b: true })).toBe("AB")
-expect(render(tpl, { a: true, b: false })).toBe("")
+it("nested sections with same key render correctly", () => {
+const template = "{{#items}}[{{#items}}inner{{/items}}]{{/items}}"
+const result = render(template, { items: true })
+expect(result).toBe("[inner]")
+})
+
+it("nested sections with array render correctly", () => {
+const template = "{{#list}}({{#list}}nested{{/list}}){{/list}}"
+const result = render(template, { list: [{ list: true }, { list: false }] })
+expect(result).toBe("(nested)()")
+})
+
+it("deeply nested same-name sections", () => {
+const template = "{{#a}}1{{#a}}2{{#a}}3{{/a}}2{{/a}}1{{/a}}"
+const result = render(template, { a: true })
+expect(result).toBe("12321")
+})
+
+it("inverted section inside regular section with same key", () => {
+const template = "{{#show}}yes{{^show}}no{{/show}}{{/show}}"
+// show=true: outer renders, inner inverted skips → "yes"
+expect(render(template, { show: true })).toBe("yes")
+// show=false: outer skips entirely → ""
+expect(render(template, { show: false })).toBe("")
 })
 })

@@ -9,6 +9,7 @@ resolveDkimKey,
 signDkim,
 type DkimOptions,
 } from "../../src/dkim"
+import { parseHeaders } from "../../src/dkim-canonicalize"
 import { DkimError } from "../../src/errors"
 
 function toBase64(buf: ArrayBuffer): string {
@@ -229,4 +230,145 @@ const noBody = "From: a@example.com\r\nTo: b@example.com\r\nSubject: Hi\r\n\r\n"
 const signed = await signDkim(noBody, opts)
 expect(signed).toContain("DKIM-Signature:")
 })
+})
+
+describe("parseHeaders() edge cases", () => {
+	it("skips line with no colon", () => {
+		const result = parseHeaders("InvalidHeader\r\nFrom: a@b.com")
+		expect(result).toHaveLength(1)
+		expect(result[0].name).toBe("From")
+		expect(result[0].value).toBe(" a@b.com")
+	})
+
+	it("parses header with empty name (colon at position 0)", () => {
+		const result = parseHeaders(": value")
+		expect(result).toHaveLength(1)
+		expect(result[0].name).toBe("")
+		expect(result[0].value).toBe(" value")
+	})
+
+	it("preserves multi-line folded value", () => {
+		const result = parseHeaders("Subject: long\r\n  continuation")
+		expect(result).toHaveLength(1)
+		expect(result[0].name).toBe("Subject")
+		expect(result[0].value).toBe(" long\r\n  continuation")
+	})
+
+	it("parses value with no space after colon", () => {
+		const result = parseHeaders("Subject:test")
+		expect(result).toHaveLength(1)
+		expect(result[0].name).toBe("Subject")
+		expect(result[0].value).toBe("test")
+	})
+
+	it("captures multiple headers with same name", () => {
+		const result = parseHeaders("Received: first\r\nReceived: second")
+		expect(result).toHaveLength(2)
+		expect(result[0]).toEqual({ name: "Received", value: " first" })
+		expect(result[1]).toEqual({ name: "Received", value: " second" })
+	})
+})
+
+describe("Relaxed header canonicalization edge cases", () => {
+	it("collapses multiple spaces to single space", () => {
+		expect(canonicalizeRelaxedHeader("Subject", "  lots   of   spaces"))
+			.toBe("subject:lots of spaces")
+	})
+
+	it("treats tab as whitespace and collapses", () => {
+		expect(canonicalizeRelaxedHeader("Subject", "\ttest"))
+			.toBe("subject:test")
+	})
+
+	it("strips trailing whitespace from value", () => {
+		expect(canonicalizeRelaxedHeader("Subject", " test   "))
+			.toBe("subject:test")
+	})
+
+	it("lowercases header name", () => {
+		expect(canonicalizeRelaxedHeader("SUBJECT", " Test"))
+			.toBe("subject:Test")
+	})
+})
+
+describe("Relaxed body canonicalization edge cases", () => {
+	it("removes multiple trailing blank lines", () => {
+		expect(canonicalizeRelaxedBody("body\r\n\r\n\r\n"))
+			.toBe("body\r\n")
+	})
+
+	it("returns CRLF for empty body", () => {
+		expect(canonicalizeRelaxedBody("")).toBe("\r\n")
+	})
+
+	it("strips trailing spaces per line", () => {
+		expect(canonicalizeRelaxedBody("line1  \r\nline2\t\r\n"))
+			.toBe("line1\r\nline2\r\n")
+	})
+
+	it("returns CRLF for single CRLF body", () => {
+		expect(canonicalizeRelaxedBody("\r\n")).toBe("\r\n")
+	})
+})
+
+describe("signDkim() edge cases", () => {
+	it("signs message with empty body (headers + blank line only)", async () => {
+		const headersOnly = "From: a@example.com\r\nSubject: Empty\r\n\r\n"
+		const signed = await signDkim(headersOnly, opts)
+		expect(signed).toContain("DKIM-Signature:")
+		expect(signed).toContain("bh=")
+		const bh = signed.match(/bh=([A-Za-z0-9+/=]+)/)
+		expect(bh).toBeTruthy()
+		const emptyDigest = await crypto.subtle.digest(
+			"SHA-256", new TextEncoder().encode("\r\n"),
+		)
+		expect(bh![1]).toBe(toBase64(emptyDigest))
+	})
+
+	it("skips missing header in headerFieldNames gracefully", async () => {
+		const signed = await signDkim(MSG, {
+			...opts,
+			headerFieldNames: ["from", "x-missing", "subject"],
+		})
+		expect(signed).toContain("h=from:x-missing:subject")
+		expect(signed).toContain("DKIM-Signature:")
+	})
+
+	it("folds long DKIM-Signature b= value across lines", async () => {
+		const signed = await signDkim(MSG, opts)
+		const headerEnd = signed.indexOf("\r\n\r\n")
+		const headerLines = signed.substring(0, headerEnd).split("\r\n")
+		const sigLines = headerLines.filter(
+			(l) => l.startsWith("DKIM-Signature:") || /^[\t ]/.test(l),
+		)
+		expect(sigLines.length).toBeGreaterThan(1)
+		for (const line of sigLines) {
+			expect(line.length).toBeLessThanOrEqual(80)
+		}
+	})
+
+	it("signs message without CRLF separator (no body)", async () => {
+		const noSep = "From: a@example.com\r\nSubject: NoBody"
+		const signed = await signDkim(noSep, opts)
+		expect(signed).toContain("DKIM-Signature:")
+	})
+})
+
+describe("Key import edge cases", () => {
+	it("handles PEM with extra whitespace between base64 lines", async () => {
+		const spacedPem = pem.replace(/\n/g, "\n  \n")
+		const key = await importDkimKey(spacedPem)
+		expect(key.type).toBe("private")
+	})
+
+	it("handles PEM with Windows-style CRLF line endings", async () => {
+		const crlfPem = pem.replace(/\n/g, "\r\n")
+		const key = await importDkimKey(crlfPem)
+		expect(key.type).toBe("private")
+	})
+
+	it("throws on invalid base64 in PEM body", async () => {
+		const badPem = "-----BEGIN PRIVATE KEY-----\n!!!invalid!!!\n-----END PRIVATE KEY-----"
+		await expect(importDkimKey(badPem)).rejects.toThrow()
+	})
 })

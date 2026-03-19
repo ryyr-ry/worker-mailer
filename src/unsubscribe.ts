@@ -1,14 +1,14 @@
 /**
  * RFC 8058 One-Click List-Unsubscribe
- * 配信停止ヘッダーを生成する
+ * Generates unsubscribe headers
  */
 
 import { CrlfInjectionError } from "./errors"
 
 export type UnsubscribeOptions = {
-	/** 配信停止URL（HTTPS必須、RFC 8058） */
+	/** Unsubscribe URL (HTTPS required, RFC 8058) */
 	url: string
-	/** mailto:アドレス（オプション） */
+	/** mailto: address (optional) */
 	mailto?: string
 }
 
@@ -42,10 +42,10 @@ function validateMailto(mailto: string): void {
 }
 
 /**
- * RFC 8058 準拠の配信停止ヘッダーを生成する
+ * Generates RFC 8058 compliant unsubscribe headers
  *
- * @param options - 配信停止オプション（URLまたはURL+mailto）
- * @returns List-Unsubscribe と List-Unsubscribe-Post ヘッダー
+ * @param options - Unsubscribe options (URL or URL+mailto)
+ * @returns List-Unsubscribe and List-Unsubscribe-Post headers
  *
  * @example
  * ```typescript

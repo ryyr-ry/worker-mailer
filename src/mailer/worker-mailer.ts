@@ -9,6 +9,8 @@ import type { SendResult } from "../result"
 import { BlockingQueue, backoff } from "../utils"
 import { dataCommand, hasNonAscii, mailFrom, noop, rcptTo, rset, sendBody } from "./commands"
 import { inferSecurity, validatePortSecurity } from "./config"
+import { tryHook } from "./hook-utils"
+import { reconnect } from "./reconnect"
 import { initializeSession } from "./session"
 import { SmtpTransport } from "./transport"
 import {
@@ -129,15 +131,11 @@ export class WorkerMailer implements Mailer {
 			}
 		}
 		if (this.active && this.emailSending) {
-			const error = new SmtpConnectionError(
-				`[WorkerMailer] Send failed: max retries (${this.maxRetries}) exceeded`,
-			)
-			this.emailSending.setSentError(error)
-			try {
-				await this.hooks?.onSendError?.(this.emailSending.options, error)
-			} catch (hookErr) {
-				this.logger.error("[WorkerMailer] onSendError hook error", hookErr)
-			}
+			const email = this.emailSending
+			const msg = `[WorkerMailer] Send failed: max retries (${this.maxRetries}) exceeded`
+			const error = new SmtpConnectionError(msg)
+			email.setSentError(error)
+			await tryHook(this.logger, "onSendError", this.hooks?.onSendError, email.options, error)
 		}
 	}
 	private get dsnCtx() {
@@ -148,8 +146,8 @@ export class WorkerMailer implements Mailer {
 		const startTime = Date.now()
 		const email = this.emailSending
 		const allRecipients = [...(email.to ?? []), ...(email.cc ?? []), ...(email.bcc ?? [])]
-		const needsUtf8 = hasNonAscii(email.from.email) ||
-			allRecipients.some((r) => hasNonAscii(r.email))
+		const needsUtf8 =
+			hasNonAscii(email.from.email) || allRecipients.some((r) => hasNonAscii(r.email))
 		await mailFrom({
 			...this.dsnCtx,
 			fromEmail: email.from.email,
@@ -173,26 +171,17 @@ export class WorkerMailer implements Mailer {
 			response: bodyResponse.trim(),
 		}
 		email.setSentResult(result)
-		try {
-			await this.hooks?.afterSend?.(email.options, result)
-		} catch (hookErr) {
-			this.logger.error("[WorkerMailer] afterSend hook error", hookErr)
-		}
+		await tryHook(this.logger, "afterSend", this.hooks?.afterSend, email.options, result)
 	}
 	private async handleSendFailure(e: unknown, attempt: number): Promise<boolean> {
 		if (!this.emailSending) return true
-		const message = e instanceof Error ? e.message : String(e)
-		this.logger.error(
-			`[WorkerMailer] Send failed: ${message} (attempt ${attempt + 1}/${this.maxRetries + 1})`,
-		)
+		const msg = `${e instanceof Error ? e.message : e} (attempt ${attempt + 1}/${this.maxRetries + 1})`
+		this.logger.error(`[WorkerMailer] Send failed: ${msg}`)
 		if (!this.active || e instanceof CrlfInjectionError || e instanceof ConfigurationError) {
-			this.emailSending.setSentError(e)
-			try {
-				const error = e instanceof Error ? e : new Error(String(e))
-				await this.hooks?.onSendError?.(this.emailSending.options, error)
-			} catch (hookErr) {
-				this.logger.error("[WorkerMailer] onSendError hook error", hookErr)
-			}
+			const email = this.emailSending
+			const error = e instanceof Error ? e : new Error(String(e))
+			email.setSentError(e)
+			await tryHook(this.logger, "onSendError", this.hooks?.onSendError, email.options, error)
 			return true
 		}
 		try {
@@ -213,31 +202,21 @@ export class WorkerMailer implements Mailer {
 	}
 	private createTransport(): SmtpTransport {
 		const mode = this.secure ? "on" : this.startTlsEnabled ? "starttls" : "off"
-		const socket = connect(
-			{ hostname: this.host, port: this.port },
-			{ secureTransport: mode, allowHalfOpen: false },
-		)
+		const addr = { hostname: this.host, port: this.port }
+		const socket = connect(addr, { secureTransport: mode, allowHalfOpen: false })
 		return new SmtpTransport(socket, this.logger, this.responseTimeoutMs)
 	}
 	private async tryReconnect(): Promise<boolean> {
-		for (let i = 0; i < 3; i++) {
-			try {
-				this.logger.info(`[WorkerMailer] Reconnecting (attempt ${i + 1}/3)`)
-				this.hooks?.onReconnecting?.({ attempt: i + 1 })
+		return reconnect({
+			recreateTransport: async () => {
 				this.transport.safeClose()
 				this.transport = this.createTransport()
 				this.capabilities = emptyCapabilities
 				await this.initializeSmtpSession()
-				this.logger.info("[WorkerMailer] Reconnection successful")
-				return true
-			} catch (err: unknown) {
-				this.logger.error(
-					`[WorkerMailer] Reconnect failed: ${err instanceof Error ? err.message : String(err)}`,
-				)
-				if (i < 2) await backoff(i)
-			}
-		}
-		return false
+			},
+			logger: this.logger,
+			hooks: this.hooks,
+		})
 	}
 	public async close(error?: Error): Promise<void> {
 		this.active = false

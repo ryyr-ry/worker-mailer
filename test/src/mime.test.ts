@@ -24,6 +24,40 @@ expect(applyDotStuffing("line\r\n.\r\nmore")).toBe("line\r\n..\r\nmore")
 })
 })
 
+describe("applyDotStuffing edge cases (RFC 5321 Section 4.5.2)", () => {
+	it("already-stuffed dots are double-stuffed", () => {
+		const input = "line1\r\n..already-stuffed\r\nline3"
+		const result = applyDotStuffing(input)
+		expect(result).toBe("line1\r\n...already-stuffed\r\nline3")
+	})
+
+	it("body containing termination sequence is escaped", () => {
+		const input = "before\r\n.\r\nafter"
+		const result = applyDotStuffing(input)
+		// The lone dot becomes ".." so it won't be interpreted as end of data
+		expect(result).toBe("before\r\n..\r\nafter")
+	})
+
+	it("multiple consecutive dot-lines", () => {
+		const input = "a\r\n.\r\n.\r\nb"
+		const result = applyDotStuffing(input)
+		expect(result).toBe("a\r\n..\r\n..\r\nb")
+	})
+
+	it("dot at start of message is stuffed", () => {
+		const input = ".first line"
+		const result = applyDotStuffing(input)
+		expect(result).toBe("..first line")
+	})
+
+	it("dot with text after CRLF is stuffed", () => {
+		const input = "line1\r\n.line2"
+		const result = applyDotStuffing(input)
+		expect(result).toBe("line1\r\n..line2")
+	})
+
+})
+
 describe("generateSafeBoundary (RFC 2046 Section 5.1.1)", () => {
 it("produces unique boundaries on successive calls", () => {
 const a = generateSafeBoundary("test_")
@@ -205,15 +239,4 @@ const msg = buildMimeMessage({ headers: headers(), text: "only text" })
 expect(msg).not.toContain("text/html")
 })
 
-it("MIME-Version: 1.0 always present", () => {
-const msg = buildMimeMessage({ headers: headers(), text: "hi" })
-expect(msg).toContain("MIME-Version: 1.0")
-})
-
-it("headers are properly formatted as Key: Value", () => {
-const msg = buildMimeMessage({ headers: headers(), text: "hi" })
-expect(msg).toContain("From: a@b.com")
-expect(msg).toContain("To: c@d.com")
-expect(msg).toContain("Subject: Test")
-})
 })

@@ -41,8 +41,18 @@ function validateLocalPart(local: string): ValidationResult | undefined {
 			reason: `Local part is too long (${local.length} chars, max ${MAX_LOCAL_LENGTH})`,
 		}
 	}
-	if (!local.startsWith('"') && local.includes("@")) {
-		return { valid: false, reason: "Local part contains unquoted @" }
+	if (local.startsWith('"')) {
+		if (!local.endsWith('"') || local.length < 2) {
+			return { valid: false, reason: "Quoted local part is missing closing quote" }
+		}
+		const inner = local.slice(1, -1)
+		if (/(?<!\\)"/.test(inner)) {
+			return { valid: false, reason: "Quoted local part contains unescaped quote" }
+		}
+	} else {
+		if (local.includes("@")) {
+			return { valid: false, reason: "Local part contains unquoted @" }
+		}
 	}
 	if (local.startsWith(".")) return { valid: false, reason: "Local part starts with a dot" }
 	if (local.endsWith(".")) return { valid: false, reason: "Local part ends with a dot" }
