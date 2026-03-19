@@ -102,6 +102,29 @@ function formatUserAddress(user: User): string {
 	return user.email
 }
 
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const MONTH_NAMES = [
+	"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+]
+
+function formatRfc5322Date(date: Date): string {
+	const day = DAY_NAMES[date.getUTCDay()]
+	const dd = String(date.getUTCDate())
+	const month = MONTH_NAMES[date.getUTCMonth()]
+	const year = date.getUTCFullYear()
+	const hh = String(date.getUTCHours()).padStart(2, "0")
+	const mm = String(date.getUTCMinutes()).padStart(2, "0")
+	const ss = String(date.getUTCSeconds()).padStart(2, "0")
+	return `${day}, ${dd} ${month} ${year} ${hh}:${mm}:${ss} +0000`
+}
+
+/**
+ * Resolves email headers by setting standard fields (From, To, Subject, Date, Message-ID).
+ * Protected headers (from, to, cc, bcc, subject, date, message-id, mime-version)
+ * provided in the headers parameter are silently removed and replaced with values
+ * derived from the structured email parameters.
+ */
 export function resolveHeaders(params: {
 	from: User
 	to: User[]
@@ -123,7 +146,7 @@ export function resolveHeaders(params: {
 	if (!headers["Reply-To"] && reply) headers["Reply-To"] = formatUserAddress(reply)
 	if (!headers.CC && cc) headers.CC = cc.map(formatUserAddress).join(", ")
 	if (!headers.Subject && subject) headers.Subject = encodeHeader(subject)
-	headers.Date = headers.Date ?? new Date().toUTCString().replace("GMT", "+0000")
+	headers.Date = headers.Date ?? formatRfc5322Date(new Date())
 	headers["Message-ID"] =
 		headers["Message-ID"] ?? `<${crypto.randomUUID()}@${from.email.split("@").pop()}>`
 }

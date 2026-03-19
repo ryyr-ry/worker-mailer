@@ -78,5 +78,21 @@ const msg = spies.debug.mock.calls[0][0] as string
 expect(msg).toContain("[REDACTED]")
 expect(msg).not.toContain("dXNlcm5hbWU=")
 })
+
+it("standalone base64 at start of message is redacted", () => {
+const logger = new Logger(LogLevel.DEBUG, "[SMTP]")
+logger.debug("dXNlcm5hbWU=\r\nmore data")
+const msg = spies.debug.mock.calls[0][0] as string
+expect(msg).toContain("[REDACTED]")
+expect(msg).not.toContain("dXNlcm5hbWU=")
+})
+
+it("short base64 password (4 chars) is redacted from AUTH LOGIN flow", () => {
+const logger = new Logger(LogLevel.DEBUG, "[SMTP]")
+logger.debug("Write to socket:\nYm9i\r\n")
+const msg = spies.debug.mock.calls[0][0] as string
+expect(msg).toContain("[REDACTED]")
+expect(msg).not.toContain("Ym9i")
+})
 })
 })

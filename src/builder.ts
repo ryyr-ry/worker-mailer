@@ -1,8 +1,9 @@
 /**
- * メールビルダーAPI
- * メソッドチェーンでEmailOptionsを構築する
+ * Email builder API
+ * Builds EmailOptions using method chaining
  */
 
+import { EmailValidationError } from "./errors"
 import type {
 	Attachment,
 	CalendarEventPart,
@@ -98,13 +99,16 @@ export class MailBuilder {
 
 	build(): EmailOptions {
 		if (!this.opts.from) {
-			throw new Error("from is required")
+			throw new EmailValidationError("[MailBuilder] from is required")
 		}
 		if (!this.opts.to) {
-			throw new Error("to is required")
+			throw new EmailValidationError("[MailBuilder] to is required")
 		}
 		if (!this.opts.subject) {
-			throw new Error("subject is required")
+			throw new EmailValidationError("[MailBuilder] subject is required")
+		}
+		if (!this.opts.text && !this.opts.html) {
+			throw new EmailValidationError("[MailBuilder] text or html is required")
 		}
 		return { ...this.opts } as EmailOptions
 	}

@@ -19,7 +19,7 @@ export default defineConfig({
 	},
 	dts: true,
 	shims: true,
-	minify: true,
+	minify: false,
 	skipNodeModulesBundle: true,
 	clean: true,
 })

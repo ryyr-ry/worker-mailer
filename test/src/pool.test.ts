@@ -10,7 +10,9 @@ return { ...mod, backoff: () => Promise.resolve() }
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const GREETING = "220 ready\r\n"
-const EHLO = "250-test\r\n250-AUTH PLAIN\r\n250 OK\r\n"
+const EHLO_STARTTLS = "250-test\r\n250-STARTTLS\r\n250-AUTH PLAIN\r\n250 OK\r\n"
+const TLS_OK = "220 Ready to start TLS\r\n"
+const EHLO_AUTH = "250-test\r\n250-AUTH PLAIN\r\n250 OK\r\n"
 const AUTH_OK = "235 OK\r\n"
 const OK = "250 OK\r\n"
 const DATA_READY = "354 Go\r\n"
@@ -35,7 +37,19 @@ readable: { getReader: () => reader },
 writable: { getWriter: () => writer },
 opened: Promise.resolve(),
 close: vi.fn().mockResolvedValue(undefined),
-startTls: vi.fn(),
+startTls: vi.fn().mockImplementation(() => {
+const tlsReader: { read: Mock; releaseLock: Mock } = {
+read: vi.fn().mockImplementation(() =>
+idx < responses.length ? Promise.resolve({ value: enc(responses[idx++]) }) : new Promise(() => {}),
+),
+releaseLock: vi.fn(),
+}
+const tlsWriter = { write: vi.fn().mockResolvedValue(undefined), releaseLock: vi.fn() }
+return {
+readable: { getReader: () => tlsReader },
+writable: { getWriter: () => tlsWriter },
+}
+}),
 } as never
 })
 }
@@ -54,7 +68,7 @@ describe("WorkerMailerPool", () => {
 beforeEach(() => vi.clearAllMocks())
 
 it("pool creates multiple connections", async () => {
-const connSession = [GREETING, EHLO, AUTH_OK, OK, OK, DATA_READY, SEND_OK, OK]
+const connSession = [GREETING, EHLO_STARTTLS, TLS_OK, EHLO_AUTH, AUTH_OK, OK, OK, DATA_READY, SEND_OK, OK]
 setup([connSession, connSession])
 const pool = new WorkerMailerPool({ ...BASE_OPTS, poolSize: 2 })
 await pool.connect()
@@ -63,7 +77,7 @@ pool.close().catch(() => {})
 })
 
 it("send through pool returns SendResult", async () => {
-const connSession = [GREETING, EHLO, AUTH_OK, OK, OK, DATA_READY, SEND_OK, OK]
+const connSession = [GREETING, EHLO_STARTTLS, TLS_OK, EHLO_AUTH, AUTH_OK, OK, OK, DATA_READY, SEND_OK, OK]
 setup([connSession])
 const pool = new WorkerMailerPool({ ...BASE_OPTS, poolSize: 1 })
 await pool.connect()
@@ -73,7 +87,7 @@ pool.close().catch(() => {})
 })
 
 it("pool close disposes all connections", async () => {
-const connSession = [GREETING, EHLO, AUTH_OK, QUIT_OK]
+const connSession = [GREETING, EHLO_STARTTLS, TLS_OK, EHLO_AUTH, AUTH_OK, QUIT_OK]
 setup([connSession, connSession])
 const pool = new WorkerMailerPool({ ...BASE_OPTS, poolSize: 2 })
 await pool.connect()
@@ -83,7 +97,7 @@ await expect(pool.send(EMAIL)).rejects.toThrow()
 })
 
 it("pool ping checks connection health", async () => {
-const connSession = [GREETING, EHLO, AUTH_OK, OK]
+const connSession = [GREETING, EHLO_STARTTLS, TLS_OK, EHLO_AUTH, AUTH_OK, OK]
 setup([connSession])
 const pool = new WorkerMailerPool({ ...BASE_OPTS, poolSize: 1 })
 await pool.connect()
@@ -93,7 +107,7 @@ pool.close().catch(() => {})
 })
 
 it("Symbol.asyncDispose closes pool", async () => {
-const connSession = [GREETING, EHLO, AUTH_OK, QUIT_OK]
+const connSession = [GREETING, EHLO_STARTTLS, TLS_OK, EHLO_AUTH, AUTH_OK, QUIT_OK]
 setup([connSession])
 const pool = new WorkerMailerPool({ ...BASE_OPTS, poolSize: 1 })
 await pool.connect()

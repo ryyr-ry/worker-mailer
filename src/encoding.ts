@@ -13,6 +13,28 @@ export function toBase64(data: string): string {
 	return btoa(binary)
 }
 
+export function fromBase64(data: string): string {
+	try {
+		return atob(data)
+	} catch {
+		throw new Error("Invalid base64 encoding")
+	}
+}
+
+export function fromBase64ToBytes(data: string): Uint8Array {
+	try {
+		const binaryString = atob(data)
+		const bytes = new Uint8Array(binaryString.length)
+		for (let i = 0; i < binaryString.length; i++) {
+			bytes[i] = binaryString.charCodeAt(i)
+		}
+		return bytes
+	} catch (e) {
+		if (e instanceof Error && e.message === "Invalid base64 encoding") throw e
+		throw new Error("Invalid base64 encoding")
+	}
+}
+
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {
 	const bytes = new Uint8Array(buffer)
 	let binary = ""

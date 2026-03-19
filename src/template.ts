@@ -1,6 +1,6 @@
 /**
- * Mustache風テンプレートエンジン
- * {{変数}} 形式のプレースホルダーを値に置換する
+ * Mustache-style template engine
+ * Replaces {{variable}} placeholders with values
  */
 
 export type TemplateData = Record<string, unknown>
@@ -11,10 +11,10 @@ type CompiledToken =
 	| { type: "section"; key: string; body: CompiledToken[]; inverted: boolean }
 
 /**
- * テンプレートをコンパイルして再利用可能な関数を返す
+ * Compiles a template and returns a reusable render function
  *
- * @param template - Mustache風テンプレート文字列
- * @returns データを受け取りレンダリング結果を返す関数
+ * @param template - Mustache-style template string
+ * @returns A function that accepts data and returns the rendered result
  */
 export function compile(template: string): (data: TemplateData) => string {
 	const tokens = tokenize(template)
@@ -22,11 +22,11 @@ export function compile(template: string): (data: TemplateData) => string {
 }
 
 /**
- * テンプレートにデータを適用して文字列を返す
+ * Applies data to a template and returns the rendered string
  *
- * @param template - Mustache風テンプレート文字列
- * @param data - 埋め込むデータ
- * @returns レンダリング結果
+ * @param template - Mustache-style template string
+ * @param data - Data to embed
+ * @returns Rendered result
  */
 export function render(template: string, data: TemplateData): string {
 	return compile(template)(data)
@@ -86,15 +86,43 @@ function parseTag(
 }
 
 function extractSection(text: string, key: string): { body: string; rest: string } {
+	const openTag = `{{#${key}}}`
+	const invertedOpenTag = `{{^${key}}}`
 	const closeTag = `{{/${key}}}`
-	const closeIdx = text.indexOf(closeTag)
-	if (closeIdx === -1) {
-		return { body: text, rest: "" }
+	let depth = 1
+	let pos = 0
+
+	while (pos < text.length && depth > 0) {
+		const nextOpen = text.indexOf(openTag, pos)
+		const nextInverted = text.indexOf(invertedOpenTag, pos)
+		const nextClose = text.indexOf(closeTag, pos)
+
+		if (nextClose === -1) break
+
+		const nextNest = minPositive(nextOpen, nextInverted)
+
+		if (nextNest !== -1 && nextNest < nextClose) {
+			depth++
+			pos = nextNest + (nextNest === nextOpen ? openTag.length : invertedOpenTag.length)
+		} else {
+			depth--
+			if (depth === 0) {
+				return {
+					body: text.substring(0, nextClose),
+					rest: text.substring(nextClose + closeTag.length),
+				}
+			}
+			pos = nextClose + closeTag.length
+		}
 	}
-	return {
-		body: text.substring(0, closeIdx),
-		rest: text.substring(closeIdx + closeTag.length),
-	}
+
+	return { body: text, rest: "" }
+}
+
+function minPositive(a: number, b: number): number {
+	if (a === -1) return b
+	if (b === -1) return a
+	return Math.min(a, b)
 }
 
 function renderTokens(tokens: CompiledToken[], data: TemplateData): string {

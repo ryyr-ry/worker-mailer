@@ -1,12 +1,12 @@
 /**
- * RFC 5322 §3.6.4 返信スレッド管理
- * In-Reply-To / References ヘッダーを生成する
+ * RFC 5322 §3.6.4 Reply thread management
+ * Generates In-Reply-To / References headers
  */
 
 export type ThreadOptions = {
-	/** 返信先メッセージのMessage-ID（例: "<abc@example.com>"） */
+	/** Message-ID of the message being replied to (e.g., "<abc@example.com>") */
 	inReplyTo: string
-	/** 既存のReferencesチェーン（スペース区切りのMessage-ID列） */
+	/** Existing References chain (space-separated Message-ID list) */
 	references?: string
 }
 
@@ -37,10 +37,10 @@ function validateReferences(refs: string): void {
 }
 
 /**
- * 返信スレッド用のヘッダーを生成する
+ * Generates headers for reply threading
  *
- * @param options - スレッドオプション
- * @returns In-Reply-To と References ヘッダーのオブジェクト
+ * @param options - Thread options
+ * @returns Object containing In-Reply-To and References headers
  *
  * @example
  * ```typescript
