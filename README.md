@@ -47,9 +47,9 @@ Built entirely on the [`cloudflare:sockets`](https://developers.cloudflare.com/w
 ## Installation
 
 ```bash
-bun add worker-mailer
+bun add @ryyr/worker-mailer
 # or
-npm install worker-mailer
+npm install @ryyr/worker-mailer
 ```
 
 ## Quick Start
@@ -59,7 +59,7 @@ npm install worker-mailer
 The fastest way to send an email. Set your `SMTP_*` env vars in `wrangler.toml` (or the dashboard) and call `sendOnce()`:
 
 ```typescript
-import { sendOnce } from "worker-mailer/convenience"
+import { sendOnce } from "@ryyr/worker-mailer/convenience"
 
 export default {
 	async fetch(request, env) {
@@ -80,8 +80,8 @@ export default {
 Pre-configured settings for popular providers. Just supply `SMTP_USER` and `SMTP_PASS`:
 
 ```typescript
-import { WorkerMailer } from "worker-mailer"
-import { preset } from "worker-mailer/convenience"
+import { WorkerMailer } from "@ryyr/worker-mailer"
+import { preset } from "@ryyr/worker-mailer/convenience"
 
 const mailer = await WorkerMailer.connect(preset("gmail", env))
 
@@ -102,7 +102,7 @@ Available providers: `"gmail"`, `"outlook"`, `"sendgrid"`.
 Full control over the connection lifecycle:
 
 ```typescript
-import { WorkerMailer } from "worker-mailer"
+import { WorkerMailer } from "@ryyr/worker-mailer"
 
 const mailer = await WorkerMailer.connect({
 	host: "smtp.example.com",
@@ -141,7 +141,7 @@ await mailer.close()
 `MockMailer` implements the `Mailer` interface without making any network connections. Use it for unit tests:
 
 ```typescript
-import { MockMailer } from "worker-mailer/testing"
+import { MockMailer } from "@ryyr/worker-mailer/testing"
 
 const mock = new MockMailer()
 
@@ -243,7 +243,7 @@ type InlineAttachment = {
 Generate iCalendar (.ics) invitations and attach them to emails:
 
 ```typescript
-import { createCalendarEvent } from "worker-mailer/calendar"
+import { createCalendarEvent } from "@ryyr/worker-mailer/calendar"
 
 const event = createCalendarEvent({
 	summary: "Team Meeting",
@@ -347,7 +347,7 @@ type SendHooks = {
 Render the raw MIME message of an email without sending it. Useful for debugging and testing:
 
 ```typescript
-import { previewEmail } from "worker-mailer/preview"
+import { previewEmail } from "@ryyr/worker-mailer/preview"
 
 const preview = previewEmail({
 	from: "sender@example.com",
@@ -582,7 +582,7 @@ type SendResult = {
 `createTestEmail()` generates a ready-to-send email for verifying your SMTP setup:
 
 ```typescript
-import { createTestEmail } from "worker-mailer/testing"
+import { createTestEmail } from "@ryyr/worker-mailer/testing"
 
 const testEmail = createTestEmail({
 	from: "sender@example.com",
@@ -692,7 +692,7 @@ const mailer = await WorkerMailer.connect({
 `WorkerMailerPool` manages multiple SMTP connections and distributes sends via round-robin:
 
 ```typescript
-import { WorkerMailerPool } from "worker-mailer"
+import { WorkerMailerPool } from "@ryyr/worker-mailer"
 
 const pool = new WorkerMailerPool({
 	host: "smtp.example.com",
@@ -721,8 +721,8 @@ await pool.close()
 Send multiple emails through a single connection with concurrency control:
 
 ```typescript
-import { WorkerMailer } from "worker-mailer"
-import { sendBatch } from "worker-mailer/batch"
+import { WorkerMailer } from "@ryyr/worker-mailer"
+import { sendBatch } from "@ryyr/worker-mailer/batch"
 
 const mailer = await WorkerMailer.connect({ /* ... */ })
 
@@ -795,7 +795,7 @@ type WorkerMailerOptions = {
 Send emails to/from internationalized addresses (e.g. `用户@例え.jp`) per RFC 6531. SMTPUTF8 is **fully automatic** — the mailer detects non-ASCII characters in email addresses, checks server SMTPUTF8 capability via EHLO, and adds the `SMTPUTF8` parameter to `MAIL FROM` when needed. No configuration required.
 
 ```ts
-import { WorkerMailer } from "worker-mailer"
+import { WorkerMailer } from "@ryyr/worker-mailer"
 
 const mailer = await WorkerMailer.connect({
   host: "smtp.example.com",
@@ -818,7 +818,7 @@ await mailer.send({
 Build proper `In-Reply-To` and `References` headers for email threading.
 
 ```ts
-import { threadHeaders } from "worker-mailer/thread"
+import { threadHeaders } from "@ryyr/worker-mailer/thread"
 
 const headers = threadHeaders({
   inReplyTo: "<original-msg-id@example.com>",
@@ -840,7 +840,7 @@ await mailer.send({
 Generate RFC 8058 one-click unsubscribe headers — required by Gmail and Yahoo since February 2024 for bulk senders.
 
 ```ts
-import { unsubscribeHeaders } from "worker-mailer/unsubscribe"
+import { unsubscribeHeaders } from "@ryyr/worker-mailer/unsubscribe"
 
 const headers = unsubscribeHeaders({
   url: "https://example.com/unsubscribe?token=abc123",
@@ -862,7 +862,7 @@ await mailer.send({
 Convert HTML emails to plain text automatically. Useful for generating the `text` part of multipart emails.
 
 ```ts
-import { htmlToText } from "worker-mailer/html-to-text"
+import { htmlToText } from "@ryyr/worker-mailer/html-to-text"
 
 const html = `<h1>Hello</h1><p>Check out <a href="https://example.com">our site</a>.</p>`
 
@@ -884,7 +884,7 @@ htmlToText(html, { wordwrap: false })
 Mustache-like template engine with HTML auto-escaping. Supports variables, sections, and raw output.
 
 ```ts
-import { render, compile } from "worker-mailer/template"
+import { render, compile } from "@ryyr/worker-mailer/template"
 
 // Simple variable substitution (HTML-escaped by default)
 render("Hello, {{name}}!", { name: "Alice" })
@@ -913,7 +913,7 @@ template({ name: "Bob" })   // "Hello, Bob!"
 Fluent builder API with method chaining for constructing emails programmatically.
 
 ```ts
-import { MailBuilder } from "worker-mailer/builder"
+import { MailBuilder } from "@ryyr/worker-mailer/builder"
 
 const email = new MailBuilder()
   .from("sender@example.com")
