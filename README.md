@@ -3,6 +3,9 @@
 [English](./README.md) | [日本語](./README_ja.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![npm version](https://img.shields.io/npm/v/@ryyr/worker-mailer.svg)](https://www.npmjs.com/package/@ryyr/worker-mailer)
+[![npm downloads](https://img.shields.io/npm/dm/@ryyr/worker-mailer.svg)](https://www.npmjs.com/package/@ryyr/worker-mailer)
+[![CI](https://github.com/ryyr-ry/worker-mailer/actions/workflows/ci.yml/badge.svg)](https://github.com/ryyr-ry/worker-mailer/actions/workflows/ci.yml)
 
 A lightweight, zero-dependency SMTP mailer for **Cloudflare Workers**.
 Built entirely on the [`cloudflare:sockets`](https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/) TCP API — no Node.js polyfills required beyond the compatibility flag.
