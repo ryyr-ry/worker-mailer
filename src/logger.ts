@@ -22,25 +22,25 @@ export default class Logger {
 
 	debug(message: string, ...args: unknown[]): void {
 		if (this.level <= LogLevel.DEBUG) {
-			console.debug(this.formatMessage(this.sanitize(message)), ...args)
+			console.debug(this.formatMessage(this.sanitize(message)), ...this.sanitizeArgs(args))
 		}
 	}
 
 	info(message: string, ...args: unknown[]): void {
 		if (this.level <= LogLevel.INFO) {
-			console.info(this.formatMessage(this.sanitize(message)), ...args)
+			console.info(this.formatMessage(this.sanitize(message)), ...this.sanitizeArgs(args))
 		}
 	}
 
 	warn(message: string, ...args: unknown[]): void {
 		if (this.level <= LogLevel.WARN) {
-			console.warn(this.formatMessage(this.sanitize(message)), ...args)
+			console.warn(this.formatMessage(this.sanitize(message)), ...this.sanitizeArgs(args))
 		}
 	}
 
 	error(message: string, ...args: unknown[]): void {
 		if (this.level <= LogLevel.ERROR) {
-			console.error(this.formatMessage(this.sanitize(message)), ...args)
+			console.error(this.formatMessage(this.sanitize(message)), ...this.sanitizeArgs(args))
 		}
 	}
 
@@ -56,5 +56,9 @@ export default class Logger {
 				const prefix = match.startsWith("\n") ? "\n" : ""
 				return `${prefix}[REDACTED]\n`
 			})
+	}
+
+	private sanitizeArgs(args: unknown[]): unknown[] {
+		return args.map((arg) => (typeof arg === "string" ? this.sanitize(arg) : arg))
 	}
 }

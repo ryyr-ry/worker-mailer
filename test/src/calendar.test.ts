@@ -115,6 +115,76 @@ describe("Calendar validation", () => {
 			CalendarValidationError,
 		)
 	})
+
+	it("UID with CR throws CalendarValidationError", () => {
+		expect(() => createCalendarEvent({ ...BASE, uid: "uid-123\rinjected" })).toThrow(
+			CalendarValidationError,
+		)
+	})
+
+	it("UID with LF throws CalendarValidationError", () => {
+		expect(() => createCalendarEvent({ ...BASE, uid: "uid-123\ninjected" })).toThrow(
+			CalendarValidationError,
+		)
+	})
+
+	it("UID with CRLF throws CalendarValidationError", () => {
+		expect(() => createCalendarEvent({ ...BASE, uid: "uid-123\r\nX-Evil:bad" })).toThrow(
+			CalendarValidationError,
+		)
+	})
+})
+
+describe("Calendar CN parameter quoting (RFC 5545 quoted-string)", () => {
+	it("organizer CN is quoted in ORGANIZER property", () => {
+		const { content } = createCalendarEvent({
+			...BASE,
+			organizer: { name: "John Doe", email: "org@test.com" },
+		})
+		expect(content).toContain('ORGANIZER;CN="John Doe":mailto:org@test.com')
+	})
+
+	it("attendee CN is quoted in ATTENDEE property", () => {
+		const { content } = createCalendarEvent({
+			...BASE,
+			attendees: [{ name: "Jane Doe", email: "jane@test.com" }],
+		})
+		expect(content).toContain('CN="Jane Doe"')
+	})
+
+	it("double quotes in CN are escaped", () => {
+		const { content } = createCalendarEvent({
+			...BASE,
+			organizer: { name: 'John "JD" Doe', email: "org@test.com" },
+		})
+		expect(content).toContain('CN="John \\"JD\\" Doe"')
+	})
+
+	it("backslashes in CN are escaped", () => {
+		const { content } = createCalendarEvent({
+			...BASE,
+			organizer: { name: "C:\\Users\\John", email: "org@test.com" },
+		})
+		expect(content).toContain('CN="C:\\\\Users\\\\John"')
+	})
+
+	it("CN with CRLF throws CalendarValidationError", () => {
+		expect(() =>
+			createCalendarEvent({
+				...BASE,
+				organizer: { name: "Evil\r\nX-Injected:bad", email: "org@test.com" },
+			}),
+		).toThrow(CalendarValidationError)
+	})
+
+	it("attendee CN with CRLF throws CalendarValidationError", () => {
+		expect(() =>
+			createCalendarEvent({
+				...BASE,
+				attendees: [{ name: "Evil\r\nX-Bad:val", email: "a@test.com" }],
+			}),
+		).toThrow(CalendarValidationError)
+	})
 })
 
 describe("Calendar security (CRLF injection)", () => {

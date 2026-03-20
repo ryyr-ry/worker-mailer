@@ -14,9 +14,7 @@ function minimal(overrides?: Partial<EmailOptions>): EmailOptions {
 
 describe("Email constructor edge cases", () => {
 	it("BCC address never appears in getRawMessage output", () => {
-		const email = new Email(
-			minimal({ bcc: ["secret1@t.com", "secret2@t.com"] }),
-		)
+		const email = new Email(minimal({ bcc: ["secret1@t.com", "secret2@t.com"] }))
 		const raw = email.getRawMessage()
 		expect(raw).not.toContain("secret1@t.com")
 		expect(raw).not.toContain("secret2@t.com")
@@ -54,8 +52,7 @@ describe("Email constructor edge cases", () => {
 						arr[i - 1].startsWith("Subject:") &&
 						(line.startsWith(" ") || line.startsWith("\t"))) ||
 					(i > 0 &&
-						(arr[i - 1].startsWith(" ") ||
-							arr[i - 1].startsWith("\t")) &&
+						(arr[i - 1].startsWith(" ") || arr[i - 1].startsWith("\t")) &&
 						(line.startsWith(" ") || line.startsWith("\t"))),
 			)
 		for (const line of subjectLines) {
@@ -70,9 +67,7 @@ describe("Email constructor edge cases", () => {
 	})
 
 	it("HTML-only email (no text) has text/html content type", () => {
-		const raw = new Email(
-			minimal({ text: undefined, html: "<h1>Hello</h1>" }),
-		).getRawMessage()
+		const raw = new Email(minimal({ text: undefined, html: "<h1>Hello</h1>" })).getRawMessage()
 		expect(raw).toContain("text/html")
 		expect(raw).not.toContain("multipart/alternative")
 	})
@@ -126,9 +121,7 @@ describe("Email constructor edge cases", () => {
 	})
 
 	it("multiple To recipients in comma-separated format", () => {
-		const email = new Email(
-			minimal({ to: ["a@t.com", "b@t.com", "c@t.com"] }),
-		)
+		const email = new Email(minimal({ to: ["a@t.com", "b@t.com", "c@t.com"] }))
 		expect(email.headers.To).toBe("a@t.com, b@t.com, c@t.com")
 	})
 })
@@ -137,9 +130,7 @@ describe("getRawMessage edge cases", () => {
 	it("message with attachment has multipart/mixed structure", () => {
 		const raw = new Email(
 			minimal({
-				attachments: [
-					{ filename: "doc.pdf", content: "dGVzdA==" },
-				],
+				attachments: [{ filename: "doc.pdf", content: "dGVzdA==" }],
 			}),
 		).getRawMessage()
 		expect(raw).toContain("multipart/mixed")
@@ -170,9 +161,7 @@ describe("getRawMessage edge cases", () => {
 		const raw = new Email(
 			minimal({
 				html: "<p>HTML</p>",
-				attachments: [
-					{ filename: "f.txt", content: "dGVzdA==" },
-				],
+				attachments: [{ filename: "f.txt", content: "dGVzdA==" }],
 			}),
 		).getRawMessage()
 		expect(raw).toContain("multipart/mixed")

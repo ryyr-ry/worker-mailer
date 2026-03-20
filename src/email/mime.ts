@@ -142,18 +142,14 @@ function resolveMimeStructure(params: MimeMessageParams): MimeStructure {
 	if (html !== undefined) {
 		const htmlPart = buildHtmlPart(html)
 		const inlines = hasInline ? inlineAttachments.map(buildInlinePart) : []
-		contentParts.push(
-			hasInline ? buildMultipart("related", [htmlPart, ...inlines]) : htmlPart,
-		)
+		contentParts.push(hasInline ? buildMultipart("related", [htmlPart, ...inlines]) : htmlPart)
 	}
 	if (calendarEvent !== undefined) {
 		contentParts.push(buildCalendarPart(calendarEvent))
 	}
 
 	const attaches =
-		attachments !== undefined && attachments.length > 0
-			? attachments.map(buildAttachmentPart)
-			: []
+		attachments !== undefined && attachments.length > 0 ? attachments.map(buildAttachmentPart) : []
 
 	return { contentParts, attachments: attaches }
 }
@@ -162,9 +158,7 @@ function assembleMimeBody(structure: MimeStructure): string {
 	const { contentParts, attachments } = structure
 	if (contentParts.length === 0) return ""
 	const base =
-		contentParts.length === 1
-			? contentParts[0]
-			: buildMultipart("alternative", contentParts)
+		contentParts.length === 1 ? contentParts[0] : buildMultipart("alternative", contentParts)
 	if (attachments.length === 0) return base
 	return buildMultipart("mixed", [base, ...attachments])
 }

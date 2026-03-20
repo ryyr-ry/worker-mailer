@@ -5,8 +5,8 @@ import type { SendHooks } from "../../src/mailer/types"
 
 vi.mock("cloudflare:sockets", () => ({ connect: vi.fn() }))
 vi.mock("../../src/utils", async (importOriginal) => {
-const mod = await importOriginal<typeof import("../../src/utils")>()
-return { ...mod, backoff: () => Promise.resolve() }
+	const mod = await importOriginal<typeof import("../../src/utils")>()
+	return { ...mod, backoff: () => Promise.resolve() }
 })
 
 const enc = (s: string) => new TextEncoder().encode(s)
@@ -22,122 +22,128 @@ const QUIT_OK = "221 Bye\r\n"
 const EMAIL = { from: "a@t.com", to: "b@t.com", subject: "T", text: "hi" }
 
 function setup(responses: string[]) {
-let idx = 0
-const reader: { read: Mock; releaseLock: Mock } = {
-read: vi.fn().mockImplementation(() =>
-idx < responses.length ? Promise.resolve({ value: enc(responses[idx++]) }) : new Promise(() => {}),
-),
-releaseLock: vi.fn(),
-}
-const writer = { write: vi.fn().mockResolvedValue(undefined), releaseLock: vi.fn() }
-const socket = {
-readable: { getReader: () => reader },
-writable: { getWriter: () => writer },
-opened: Promise.resolve(),
-close: vi.fn().mockResolvedValue(undefined),
-startTls: vi.fn().mockReturnValue({
-readable: { getReader: () => reader },
-writable: { getWriter: () => writer },
-}),
-}
-vi.mocked(connect).mockReturnValue(socket as never)
-return { reader, writer, socket }
+	let idx = 0
+	const reader: { read: Mock; releaseLock: Mock } = {
+		read: vi
+			.fn()
+			.mockImplementation(() =>
+				idx < responses.length
+					? Promise.resolve({ value: enc(responses[idx++]) })
+					: new Promise(() => {}),
+			),
+		releaseLock: vi.fn(),
+	}
+	const writer = { write: vi.fn().mockResolvedValue(undefined), releaseLock: vi.fn() }
+	const socket = {
+		readable: { getReader: () => reader },
+		writable: { getWriter: () => writer },
+		opened: Promise.resolve(),
+		close: vi.fn().mockResolvedValue(undefined),
+		startTls: vi.fn().mockReturnValue({
+			readable: { getReader: () => reader },
+			writable: { getWriter: () => writer },
+		}),
+	}
+	vi.mocked(connect).mockReturnValue(socket as never)
+	return { reader, writer, socket }
 }
 
 const BASE_OPTS = {
-host: "smtp.test.com",
-port: 587,
-username: "u@t.com",
-password: "p",
-authType: ["plain" as const],
+	host: "smtp.test.com",
+	port: 587,
+	username: "u@t.com",
+	password: "p",
+	authType: ["plain" as const],
 }
 
 const STANDARD_SESSION = [GREETING, EHLO_STARTTLS, TLS_OK, EHLO_AUTH, AUTH_OK]
 
 describe("SendHooks", () => {
-beforeEach(() => vi.clearAllMocks())
+	beforeEach(() => vi.clearAllMocks())
 
-it("beforeSend called before SMTP commands", async () => {
-const order: string[] = []
-const hooks: SendHooks = {
-beforeSend: vi.fn().mockImplementation(() => { order.push("hook") }),
-}
-setup([...STANDARD_SESSION, OK, OK, DATA_READY, SEND_OK, OK])
-const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks })
-await mailer.send(EMAIL)
-expect(hooks.beforeSend).toHaveBeenCalledTimes(1)
-mailer.close().catch(() => {})
-})
+	it("beforeSend called before SMTP commands", async () => {
+		const order: string[] = []
+		const hooks: SendHooks = {
+			beforeSend: vi.fn().mockImplementation(() => {
+				order.push("hook")
+			}),
+		}
+		setup([...STANDARD_SESSION, OK, OK, DATA_READY, SEND_OK, OK])
+		const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks })
+		await mailer.send(EMAIL)
+		expect(hooks.beforeSend).toHaveBeenCalledTimes(1)
+		mailer.close().catch(() => {})
+	})
 
-it("beforeSend can cancel send via returning false", async () => {
-const hooks: SendHooks = {
-beforeSend: vi.fn().mockResolvedValue(false),
-}
-setup([...STANDARD_SESSION])
-const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks })
-await expect(mailer.send(EMAIL)).rejects.toThrow()
-mailer.close().catch(() => {})
-})
+	it("beforeSend can cancel send via returning false", async () => {
+		const hooks: SendHooks = {
+			beforeSend: vi.fn().mockResolvedValue(false),
+		}
+		setup([...STANDARD_SESSION])
+		const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks })
+		await expect(mailer.send(EMAIL)).rejects.toThrow()
+		mailer.close().catch(() => {})
+	})
 
-it("afterSend called with SendResult on success", async () => {
-const hooks: SendHooks = { afterSend: vi.fn() }
-setup([...STANDARD_SESSION, OK, OK, DATA_READY, SEND_OK, OK])
-const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks })
-await mailer.send(EMAIL)
-expect(hooks.afterSend).toHaveBeenCalledTimes(1)
-expect(hooks.afterSend).toHaveBeenCalledWith(
-expect.objectContaining({ from: "a@t.com" }),
-expect.objectContaining({ messageId: expect.any(String) }),
-)
-mailer.close().catch(() => {})
-})
+	it("afterSend called with SendResult on success", async () => {
+		const hooks: SendHooks = { afterSend: vi.fn() }
+		setup([...STANDARD_SESSION, OK, OK, DATA_READY, SEND_OK, OK])
+		const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks })
+		await mailer.send(EMAIL)
+		expect(hooks.afterSend).toHaveBeenCalledTimes(1)
+		expect(hooks.afterSend).toHaveBeenCalledWith(
+			expect.objectContaining({ from: "a@t.com" }),
+			expect.objectContaining({ messageId: expect.any(String) }),
+		)
+		mailer.close().catch(() => {})
+	})
 
-it("onSendError called on send failure", async () => {
-const hooks: SendHooks = { onSendError: vi.fn() }
-// 550 MAIL FROM -> RSET OK -> maxRetries exceeded -> onSendError called
-setup([...STANDARD_SESSION, "550 denied\r\n", OK])
-const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks, maxRetries: 0 })
-await expect(mailer.send(EMAIL)).rejects.toThrow()
-expect(hooks.onSendError).toHaveBeenCalledTimes(1)
-})
+	it("onSendError called on send failure", async () => {
+		const hooks: SendHooks = { onSendError: vi.fn() }
+		// 550 MAIL FROM -> RSET OK -> maxRetries exceeded -> onSendError called
+		setup([...STANDARD_SESSION, "550 denied\r\n", OK])
+		const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks, maxRetries: 0 })
+		await expect(mailer.send(EMAIL)).rejects.toThrow()
+		expect(hooks.onSendError).toHaveBeenCalledTimes(1)
+	})
 
-it("onSendError called for non-retryable ConfigurationError (P2 fix)", async () => {
-// DSN envelopeId with space passes Email constructor but throws ConfigurationError in commands
-const hooks: SendHooks = { onSendError: vi.fn() }
-const EHLO_DSN = "250-test\r\n250-AUTH PLAIN\r\n250-DSN\r\n250 OK\r\n"
-setup([GREETING, EHLO_STARTTLS, TLS_OK, EHLO_DSN, AUTH_OK])
-const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks })
-await expect(
-mailer.send({ ...EMAIL, dsnOverride: { envelopeId: "id with space" } }),
-).rejects.toThrow()
-expect(hooks.onSendError).toHaveBeenCalled()
-mailer.close().catch(() => {})
-})
+	it("onSendError called for non-retryable ConfigurationError (P2 fix)", async () => {
+		// DSN envelopeId with space passes Email constructor but throws ConfigurationError in commands
+		const hooks: SendHooks = { onSendError: vi.fn() }
+		const EHLO_DSN = "250-test\r\n250-AUTH PLAIN\r\n250-DSN\r\n250 OK\r\n"
+		setup([GREETING, EHLO_STARTTLS, TLS_OK, EHLO_DSN, AUTH_OK])
+		const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks })
+		await expect(
+			mailer.send({ ...EMAIL, dsnOverride: { envelopeId: "id with space" } }),
+		).rejects.toThrow()
+		expect(hooks.onSendError).toHaveBeenCalled()
+		mailer.close().catch(() => {})
+	})
 
-it("onConnected called after successful connection", async () => {
-const hooks: SendHooks = { onConnected: vi.fn() }
-setup([...STANDARD_SESSION])
-await WorkerMailer.connect({ ...BASE_OPTS, hooks })
-expect(hooks.onConnected).toHaveBeenCalledTimes(1)
-})
+	it("onConnected called after successful connection", async () => {
+		const hooks: SendHooks = { onConnected: vi.fn() }
+		setup([...STANDARD_SESSION])
+		await WorkerMailer.connect({ ...BASE_OPTS, hooks })
+		expect(hooks.onConnected).toHaveBeenCalledTimes(1)
+	})
 
-it("hook error does not break send flow", async () => {
-const hooks: SendHooks = {
-afterSend: vi.fn().mockRejectedValue(new Error("hook crash")),
-}
-setup([...STANDARD_SESSION, OK, OK, DATA_READY, SEND_OK, OK])
-const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks })
-// Send should succeed despite afterSend hook throwing
-const result = await mailer.send(EMAIL)
-expect(result.messageId).toBeTruthy()
-mailer.close().catch(() => {})
-})
+	it("hook error does not break send flow", async () => {
+		const hooks: SendHooks = {
+			afterSend: vi.fn().mockRejectedValue(new Error("hook crash")),
+		}
+		setup([...STANDARD_SESSION, OK, OK, DATA_READY, SEND_OK, OK])
+		const mailer = await WorkerMailer.connect({ ...BASE_OPTS, hooks })
+		// Send should succeed despite afterSend hook throwing
+		const result = await mailer.send(EMAIL)
+		expect(result.messageId).toBeTruthy()
+		mailer.close().catch(() => {})
+	})
 
-it("no hooks configured: send works normally", async () => {
-setup([...STANDARD_SESSION, OK, OK, DATA_READY, SEND_OK, OK])
-const mailer = await WorkerMailer.connect(BASE_OPTS)
-const result = await mailer.send(EMAIL)
-expect(result.messageId).toBeTruthy()
-mailer.close().catch(() => {})
-})
+	it("no hooks configured: send works normally", async () => {
+		setup([...STANDARD_SESSION, OK, OK, DATA_READY, SEND_OK, OK])
+		const mailer = await WorkerMailer.connect(BASE_OPTS)
+		const result = await mailer.send(EMAIL)
+		expect(result.messageId).toBeTruthy()
+		mailer.close().catch(() => {})
+	})
 })

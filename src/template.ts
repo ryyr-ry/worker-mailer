@@ -59,10 +59,7 @@ function tokenize(template: string): CompiledToken[] {
 	return tokens
 }
 
-function parseTag(
-	content: string,
-	remaining: string,
-): { token: CompiledToken; remaining: string } {
+function parseTag(content: string, remaining: string): { token: CompiledToken; remaining: string } {
 	if (content.startsWith("#") || content.startsWith("^")) {
 		const inverted = content.startsWith("^")
 		const key = content.substring(1).trim()
@@ -158,12 +155,17 @@ function renderSection(token: CompiledToken & { type: "section" }, data: Templat
 	if (Array.isArray(value)) {
 		return value
 			.map((item) => {
-				const itemData = typeof item === "object" && item !== null
-					? { ...data, ...(item as TemplateData) }
-					: { ...data, ".": item }
+				const itemData =
+					typeof item === "object" && item !== null
+						? { ...data, ...(item as TemplateData) }
+						: { ...data, ".": item }
 				return renderTokens(token.body, itemData)
 			})
 			.join("")
+	}
+
+	if (isTruthy && typeof value === "object" && value !== null && !Array.isArray(value)) {
+		return renderTokens(token.body, { ...data, ...(value as TemplateData) })
 	}
 
 	return isTruthy ? renderTokens(token.body, data) : ""

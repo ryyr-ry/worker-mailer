@@ -165,5 +165,4 @@ describe("UTF-8 encode/decode", () => {
 		const emoji = "\u{1F4E7}\u{1F600}"
 		expect(decode(encode(emoji))).toBe(emoji)
 	})
-
 })

@@ -65,7 +65,8 @@ export async function rcptTo({
 }: RcptToParams): Promise<void> {
 	for (const user of recipients) {
 		let message = `RCPT TO: <${user.email}>`
-		if (capabilities.supportsDSN) {
+		const hasNotifyConfig = dsnOverride?.NOTIFY !== undefined || dsnGlobal?.NOTIFY !== undefined
+		if (capabilities.supportsDSN && hasNotifyConfig) {
 			message += buildNotify(dsnGlobal, dsnOverride)
 		}
 		await transport.writeLine(message)

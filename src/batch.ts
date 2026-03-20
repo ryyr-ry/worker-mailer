@@ -1,4 +1,5 @@
 import type { EmailOptions } from "./email/types"
+import { ConfigurationError } from "./errors"
 import type { Mailer } from "./mailer"
 import type { SendResult } from "./result"
 
@@ -21,6 +22,10 @@ export async function sendBatch(
 ): Promise<BatchResult[]> {
 	const continueOnError = options?.continueOnError ?? true
 	const concurrency = options?.concurrency ?? 1
+
+	if (!Number.isInteger(concurrency) || concurrency < 0) {
+		throw new ConfigurationError("[Batch] concurrency must be a non-negative integer")
+	}
 
 	if (concurrency <= 1) {
 		return sendSequential(mailer, emails, continueOnError)
