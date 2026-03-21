@@ -1,6 +1,6 @@
 {
 	"name": "@ryyr/worker-mailer",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"publishConfig": {
 		"access": "public"
 	},
@@ -96,7 +96,7 @@
 	"scripts": {
 		"build": "tsup",
 		"test": "vitest",
-    "test:e2e": "echo 'E2E tests not yet configured. See docs/test-strategy.md' && exit 1",
+		"test:e2e": "echo 'E2E tests not yet configured. See docs/test-strategy.md' && exit 1",
 		"format": "bunx biome format --write .",
 		"lint": "bunx biome lint .",
 		"check": "bunx biome check --write ."
