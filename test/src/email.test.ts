@@ -246,6 +246,10 @@ describe("Email construction (RFC 5322)", () => {
 			expect(() => new Email(minimal({ from: "<evil>@t.com" }))).toThrow(EmailValidationError)
 		})
 
+		it("empty to array throws EmailValidationError", () => {
+			expect(() => new Email(minimal({ to: [] }))).toThrow(EmailValidationError)
+		})
+
 		it("getRawMessage produces valid RFC 5322 message", () => {
 			const email = new Email(
 				minimal({

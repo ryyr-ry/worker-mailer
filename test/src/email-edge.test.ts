@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { Email } from "../../src/email/email"
 import type { EmailOptions } from "../../src/email/types"
+import { EmailValidationError } from "../../src/errors"
 
 function minimal(overrides?: Partial<EmailOptions>): EmailOptions {
 	return {
@@ -33,10 +34,8 @@ describe("Email constructor edge cases", () => {
 		expect(raw.toLowerCase()).not.toContain("bcc")
 	})
 
-	it("empty to array creates email with empty To header", () => {
-		const email = new Email(minimal({ to: [] }))
-		expect(email.to).toEqual([])
-		expect(email.headers.To).toBe("")
+	it("empty to array throws EmailValidationError", () => {
+		expect(() => new Email(minimal({ to: [] }))).toThrow(EmailValidationError)
 	})
 
 	it("very long subject (500+ chars) is folded correctly", () => {

@@ -89,4 +89,8 @@ describe("MailBuilder", () => {
 			.build()
 		expect(opts.to).toEqual(["a@a.com", "b@b.com"])
 	})
+
+	it("to() without recipients throws EmailValidationError", () => {
+		expect(() => new MailBuilder().to()).toThrow(EmailValidationError)
+	})
 })

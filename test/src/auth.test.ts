@@ -97,6 +97,21 @@ describe("SMTP Authentication (RFC 4954)", () => {
 		expect(t.writeLine.mock.calls[0][0]).toBe("AUTH LOGIN")
 	})
 
+	it("falls back to supported auth types when preferredTypes is omitted", async () => {
+		const t = mockTransport()
+		t.readTimeout.mockResolvedValueOnce("334 VXNlcm5hbWU6\r\n")
+		t.readTimeout.mockResolvedValueOnce("334 UGFzc3dvcmQ6\r\n")
+		t.readTimeout.mockResolvedValueOnce("235 OK\r\n")
+		await authenticate({
+			transport: t as never,
+			credentials: { username: "u", password: "p" },
+			capabilities: caps({ authTypeSupported: ["login"] }),
+			preferredTypes: [],
+			logger,
+		})
+		expect(t.writeLine.mock.calls[0][0]).toBe("AUTH LOGIN")
+	})
+
 	it("throws SmtpAuthError on 535 response (RFC 4954 Section 6)", async () => {
 		const t = mockTransport()
 		t.readTimeout.mockResolvedValueOnce("535 Authentication failed\r\n")

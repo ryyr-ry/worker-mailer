@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { SmtpConnectionError } from "../../src/errors"
+import { EmailValidationError, SmtpConnectionError } from "../../src/errors"
 import { MockMailer } from "../../src/mock"
 import {
 	assertNotSentTo,
@@ -58,6 +58,13 @@ describe("MockMailer", () => {
 		await expect(
 			m.send({ from: "a@b.com", to: "c@d.com", subject: "S", text: "body" }),
 		).rejects.toThrow(SmtpConnectionError)
+	})
+
+	it("empty to array rejects EmailValidationError", async () => {
+		const m = new MockMailer()
+		await expect(m.send({ from: "a@b.com", to: [], subject: "S", text: "body" })).rejects.toThrow(
+			EmailValidationError,
+		)
 	})
 
 	it("dryRun returns a dry-run result and does not record a sent email", async () => {

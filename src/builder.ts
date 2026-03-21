@@ -24,18 +24,15 @@ export class MailBuilder {
 	}
 
 	to(...recipients: Recipient[]): this {
-		this.opts.to = recipients.length === 1 ? recipients[0] : (recipients as string[] | User[])
-		return this
+		return this.setRecipients("to", recipients)
 	}
 
 	cc(...recipients: Recipient[]): this {
-		this.opts.cc = recipients.length === 1 ? recipients[0] : (recipients as string[] | User[])
-		return this
+		return this.setRecipients("cc", recipients)
 	}
 
 	bcc(...recipients: Recipient[]): this {
-		this.opts.bcc = recipients.length === 1 ? recipients[0] : (recipients as string[] | User[])
-		return this
+		return this.setRecipients("bcc", recipients)
 	}
 
 	replyTo(address: Recipient): this {
@@ -88,11 +85,19 @@ export class MailBuilder {
 		return this
 	}
 
+	private setRecipients(field: "to" | "cc" | "bcc", recipients: Recipient[]): this {
+		if (recipients.length === 0) {
+			throw new EmailValidationError(`[MailBuilder] ${field} requires at least one recipient`)
+		}
+		this.opts[field] = recipients.length === 1 ? recipients[0] : (recipients as string[] | User[])
+		return this
+	}
+
 	build(): EmailOptions {
 		if (!this.opts.from) {
 			throw new EmailValidationError("[MailBuilder] from is required")
 		}
-		if (!this.opts.to) {
+		if (!this.opts.to || (Array.isArray(this.opts.to) && this.opts.to.length === 0)) {
 			throw new EmailValidationError("[MailBuilder] to is required")
 		}
 		if (!this.opts.subject) {
