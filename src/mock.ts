@@ -29,7 +29,7 @@ export class MockMailer implements Mailer {
 		this.mockOptions = options ?? {}
 	}
 
-	async send(options: EmailOptions, _sendOptions?: SendOptions): Promise<SendResult> {
+	async send(options: EmailOptions, sendOptions?: SendOptions): Promise<SendResult> {
 		if (!this._connected) throw new SmtpConnectionError("[MockMailer] Not connected")
 		new Email(options)
 		if (this.mockOptions.simulateDelay) {
@@ -37,19 +37,16 @@ export class MockMailer implements Mailer {
 		}
 		if (this.mockOptions.simulateError) throw this.mockOptions.simulateError
 
-		this.messageCounter++
-		const messageId = `<mock-${this.messageCounter}-${Date.now()}@mock.local>`
-		const allRecipients = normalizeRecipients(options.to)
-			.concat(options.cc ? normalizeRecipients(options.cc) : [])
-			.concat(options.bcc ? normalizeRecipients(options.bcc) : [])
-
-		const result: SendResult = {
-			messageId,
-			accepted: allRecipients,
-			rejected: [],
-			responseTime: this.mockOptions.simulateDelay ?? 0,
-			response: "250 2.0.0 Ok: queued as mock",
+		const allRecipients = getRecipientEmails(options)
+		if (sendOptions?.dryRun) {
+			return createDryRunResult(allRecipients, this.mockOptions.simulateDelay ?? 0)
 		}
+
+		const result = createMockSendResult(
+			allRecipients,
+			++this.messageCounter,
+			this.mockOptions.simulateDelay ?? 0,
+		)
 		this._sentEmails.push({
 			options: { ...options },
 			result: { ...result },
@@ -118,3 +115,33 @@ export class MockMailer implements Mailer {
 }
 
 export { normalizeRecipients } from "./mock-shared"
+
+function getRecipientEmails(options: EmailOptions): string[] {
+	return normalizeRecipients(options.to)
+		.concat(options.cc ? normalizeRecipients(options.cc) : [])
+		.concat(options.bcc ? normalizeRecipients(options.bcc) : [])
+}
+
+function createDryRunResult(accepted: string[], responseTime: number): SendResult {
+	return {
+		messageId: "",
+		accepted,
+		rejected: [],
+		responseTime,
+		response: "DRY RUN: no message sent",
+	}
+}
+
+function createMockSendResult(
+	accepted: string[],
+	messageCounter: number,
+	responseTime: number,
+): SendResult {
+	return {
+		messageId: `<mock-${messageCounter}-${Date.now()}@mock.local>`,
+		accepted,
+		rejected: [],
+		responseTime,
+		response: "250 2.0.0 Ok: queued as mock",
+	}
+}

@@ -157,7 +157,7 @@ await mock.send({
 })
 
 console.log(mock.sendCount) // 1
-console.log(mock.lastEmail?.subject) // "Test"
+console.log(mock.lastEmail?.options.subject) // "Test"
 console.log(mock.hasSentTo("user@example.com")) // true
 console.log(mock.hasSentWithSubject("Test")) // true
 console.log(mock.sentEmails) // ReadonlyArray of all sent emails

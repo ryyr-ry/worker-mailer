@@ -57,6 +57,36 @@ function setupSocket(responses: string[]) {
 	return { writer }
 }
 
+function setupSocketSequence(responsesPerConnection: string[][]) {
+	let connectionIndex = 0
+	vi.mocked(connect).mockImplementation(() => {
+		const responses = responsesPerConnection[connectionIndex] || responsesPerConnection.at(-1) || []
+		connectionIndex++
+		let responseIndex = 0
+		const reader: { read: Mock; releaseLock: Mock } = {
+			read: vi
+				.fn()
+				.mockImplementation(() =>
+					responseIndex < responses.length
+						? Promise.resolve({ value: encode(responses[responseIndex++]) })
+						: new Promise(() => {}),
+				),
+			releaseLock: vi.fn(),
+		}
+		const writer = { write: vi.fn().mockResolvedValue(undefined), releaseLock: vi.fn() }
+		return {
+			readable: { getReader: () => reader },
+			writable: { getWriter: () => writer },
+			opened: Promise.resolve(),
+			close: vi.fn().mockResolvedValue(undefined),
+			startTls: vi.fn().mockReturnValue({
+				readable: { getReader: () => reader },
+				writable: { getWriter: () => writer },
+			}),
+		} as never
+	})
+}
+
 function decodeCommands(writer: { write: Mock }): string[] {
 	return writer.write.mock.calls.map((call: [Uint8Array]) => new TextDecoder().decode(call[0]))
 }
@@ -152,5 +182,22 @@ describe("MailPlugin", () => {
 		await expect(mailer.send(EMAIL)).rejects.toThrow()
 		await mailer.close()
 		expect(events.some((event) => event.type === "error")).toBe(true)
+	})
+
+	it("telemetry plugin emits connect again after auto-reconnect", async () => {
+		const events: TelemetryEvent[] = []
+		setupSocketSequence([
+			[...STANDARD_SESSION, "421 lost\r\n", "421 reset failed\r\n"],
+			[...STANDARD_SESSION, OK, OK, DATA_READY, SEND_OK, QUIT_OK],
+		])
+		const mailer = await WorkerMailer.connect({
+			...BASE_OPTS,
+			autoReconnect: true,
+			maxRetries: 1,
+			plugins: [telemetryPlugin({ onEvent: (event) => void events.push(event) })],
+		})
+		await mailer.send(EMAIL)
+		await mailer.close()
+		expect(events.filter((event) => event.type === "connect")).toHaveLength(2)
 	})
 })

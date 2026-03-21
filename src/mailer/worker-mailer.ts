@@ -262,6 +262,7 @@ export class WorkerMailer implements Mailer {
 				this.transport = this.createTransport()
 				this.capabilities = emptyCapabilities
 				await this.initializeSmtpSession()
+				await this.pluginRunner.onConnected({ host: this.host, port: this.port })
 			},
 			logger: this.logger,
 			pluginRunner: this.pluginRunner,

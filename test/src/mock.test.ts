@@ -60,6 +60,19 @@ describe("MockMailer", () => {
 		).rejects.toThrow(SmtpConnectionError)
 	})
 
+	it("dryRun returns a dry-run result and does not record a sent email", async () => {
+		const m = new MockMailer()
+		const result = await m.send(
+			{ from: "a@b.com", to: ["c@d.com", "e@f.com"], subject: "S", text: "body" },
+			{ dryRun: true },
+		)
+		expect(result.messageId).toBe("")
+		expect(result.accepted).toEqual(["c@d.com", "e@f.com"])
+		expect(result.response).toBe("DRY RUN: no message sent")
+		expect(m.sendCount).toBe(0)
+		expect(m.sentEmails).toHaveLength(0)
+	})
+
 	it("lastEmail returns most recent", async () => {
 		const m = new MockMailer()
 		await m.send({ from: "a@b.com", to: "c@d.com", subject: "first", text: "body" })

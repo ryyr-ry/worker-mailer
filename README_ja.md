@@ -168,7 +168,7 @@ await mock.send({
 })
 
 console.log(mock.sendCount) // 1
-console.log(mock.lastEmail?.subject) // "テスト"
+console.log(mock.lastEmail?.options.subject) // "テスト"
 console.log(mock.hasSentTo("user@example.com")) // true
 console.log(mock.hasSentWithSubject("テスト")) // true
 console.log(mock.sentEmails) // 送信済みメールの読み取り専用配列
