@@ -22,11 +22,13 @@ const dec = (b: Uint8Array) => new TextDecoder().decode(b)
 function mockTransport(responses: string[]) {
 	let idx = 0
 	const reader = {
-		read: vi.fn().mockImplementation(() =>
-			idx < responses.length
-				? Promise.resolve({ value: enc(responses[idx++]) })
-				: Promise.resolve({ done: true }),
-		),
+		read: vi
+			.fn()
+			.mockImplementation(() =>
+				idx < responses.length
+					? Promise.resolve({ value: enc(responses[idx++]) })
+					: Promise.resolve({ done: true }),
+			),
 		releaseLock: vi.fn(),
 	}
 	const writer = { write: vi.fn().mockResolvedValue(undefined), releaseLock: vi.fn() }
@@ -183,7 +185,12 @@ describe("rcptTo", () => {
 		const caps = { ...baseCaps, supportsDSN: true }
 		const dsn = { NOTIFY: { SUCCESS: true, FAILURE: true, DELAY: true } }
 		const { transport, writer } = mockTransport(["250 OK\r\n"])
-		await rcptTo({ transport, recipients: [{ email: "u@d.com" }], capabilities: caps, dsnOverride: dsn })
+		await rcptTo({
+			transport,
+			recipients: [{ email: "u@d.com" }],
+			capabilities: caps,
+			dsnOverride: dsn,
+		})
 		expect(writtenLines(writer)[0]).toContain("NOTIFY=SUCCESS,FAILURE,DELAY")
 	})
 	it("throws SmtpCommandError on non-2xx per-recipient response", async () => {

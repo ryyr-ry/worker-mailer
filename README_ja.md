@@ -3,6 +3,9 @@
 [English](./README.md) | [日本語](./README_ja.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![npm version](https://img.shields.io/npm/v/@ryyr/worker-mailer.svg)](https://www.npmjs.com/package/@ryyr/worker-mailer)
+[![npm downloads](https://img.shields.io/npm/dm/@ryyr/worker-mailer.svg)](https://www.npmjs.com/package/@ryyr/worker-mailer)
+[![CI](https://github.com/ryyr-ry/worker-mailer/actions/workflows/ci.yml/badge.svg)](https://github.com/ryyr-ry/worker-mailer/actions/workflows/ci.yml)
 
 **Worker Mailer** は [Cloudflare Workers](https://workers.cloudflare.com/) 上で動作する軽量SMTPメーラーライブラリです。[Cloudflare TCP Sockets](https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/) を利用しており、外部依存はゼロです。
 

@@ -1,3 +1,4 @@
+import type { DkimOptions } from "../dkim"
 import { ConfigurationError } from "../errors"
 import { LogLevel } from "../logger"
 import type { AuthType, WorkerMailerOptions } from "../mailer"
@@ -24,7 +25,9 @@ function parseBoolean(value: string | undefined): boolean | undefined {
 	const lower = value.toLowerCase()
 	if (lower === "true" || lower === "1" || lower === "yes") return true
 	if (lower === "false" || lower === "0" || lower === "no") return false
-	return undefined
+	throw new ConfigurationError(
+		`Invalid boolean value "${value}". Expected: true/false, yes/no, 1/0`,
+	)
 }
 
 function parseAuthType(value: string | undefined): AuthType[] | undefined {
@@ -45,11 +48,16 @@ function parseLogLevel(value: string | undefined): LogLevel | undefined {
 		INFO: LogLevel.INFO,
 		DEBUG: LogLevel.DEBUG,
 	}
-	return levels[upper]
+	const level = levels[upper]
+	if (level === undefined) {
+		throw new ConfigurationError(
+			`Invalid log level "${value}". Expected: DEBUG, INFO, WARN, ERROR, NONE`,
+		)
+	}
+	return level
 }
 
-export function fromEnv(env: Record<string, unknown>, prefix = "SMTP_"): WorkerMailerOptions {
-	const host = requireString(env, `${prefix}HOST`)
+function parsePort(env: Record<string, unknown>, prefix: string): number {
 	const portStr = requireString(env, `${prefix}PORT`)
 	const port = Number.parseInt(portStr, 10)
 	if (Number.isNaN(port)) {
@@ -62,43 +70,64 @@ export function fromEnv(env: Record<string, unknown>, prefix = "SMTP_"): WorkerM
 			`Environment variable ${prefix}PORT value "${portStr}" is out of range (must be 1-65535).`,
 		)
 	}
+	return port
+}
 
+function parseMaxRetries(env: Record<string, unknown>, prefix: string): number | undefined {
+	const str = getString(env, `${prefix}MAX_RETRIES`)
+	if (str === undefined) return undefined
+	const value = Number(str)
+	if (Number.isNaN(value) || value < 0 || !Number.isInteger(value)) {
+		throw new ConfigurationError(
+			`Environment variable ${prefix}MAX_RETRIES value "${str}" is not a valid non-negative integer.`,
+		)
+	}
+	return value
+}
+
+function parseDkimConfig(env: Record<string, unknown>, prefix: string): DkimOptions | undefined {
+	const domain = getString(env, `${prefix}DKIM_DOMAIN`)
+	const selector = getString(env, `${prefix}DKIM_SELECTOR`)
+	const key = getString(env, `${prefix}DKIM_PRIVATE_KEY`)
+	const count = [domain, selector, key].filter((v) => v !== undefined).length
+	if (count > 0 && count < 3) {
+		throw new ConfigurationError(
+			`All three DKIM variables (${prefix}DKIM_DOMAIN, ${prefix}DKIM_SELECTOR, ${prefix}DKIM_PRIVATE_KEY) must be set together`,
+		)
+	}
+	if (!domain || !selector || !key) return undefined
+	return {
+		domainName: domain,
+		keySelector: selector,
+		privateKey: key.replace(/\\n/g, "\n"),
+	}
+}
+
+export function fromEnv(env: Record<string, unknown>, prefix = "SMTP_"): WorkerMailerOptions {
+	const host = requireString(env, `${prefix}HOST`)
+	const port = parsePort(env, prefix)
 	const user = getString(env, `${prefix}USER`)
 	const pass = getString(env, `${prefix}PASS`)
-	const secure = parseBoolean(getString(env, `${prefix}SECURE`))
-	const startTls = parseBoolean(getString(env, `${prefix}START_TLS`))
-	const authType = parseAuthType(getString(env, `${prefix}AUTH_TYPE`))
-	const ehloHostname = getString(env, `${prefix}EHLO_HOSTNAME`)
-	const logLevel = parseLogLevel(getString(env, `${prefix}LOG_LEVEL`))
-	const maxRetriesStr = getString(env, `${prefix}MAX_RETRIES`)
-	const maxRetries = maxRetriesStr !== undefined ? Number.parseInt(maxRetriesStr, 10) : undefined
-
 	const options: WorkerMailerOptions = { host, port }
 
+	const secure = parseBoolean(getString(env, `${prefix}SECURE`))
+	const startTls = parseBoolean(getString(env, `${prefix}START_TLS`))
 	if (secure !== undefined) options.secure = secure
 	if (startTls !== undefined) options.startTls = startTls
 	if (user !== undefined && pass !== undefined) {
 		options.username = user
 		options.password = pass
 	}
+	const authType = parseAuthType(getString(env, `${prefix}AUTH_TYPE`))
 	if (authType !== undefined && authType.length > 0) options.authType = authType
+	const ehloHostname = getString(env, `${prefix}EHLO_HOSTNAME`)
 	if (ehloHostname !== undefined) options.ehloHostname = ehloHostname
+	const logLevel = parseLogLevel(getString(env, `${prefix}LOG_LEVEL`))
 	if (logLevel !== undefined) options.logLevel = logLevel
-	if (maxRetries !== undefined && !Number.isNaN(maxRetries)) {
-		options.maxRetries = maxRetries
-	}
-
-	const dkimDomain = getString(env, `${prefix}DKIM_DOMAIN`)
-	const dkimSelector = getString(env, `${prefix}DKIM_SELECTOR`)
-	const dkimPrivateKey = getString(env, `${prefix}DKIM_PRIVATE_KEY`)
-
-	if (dkimDomain && dkimSelector && dkimPrivateKey) {
-		options.dkim = {
-			domainName: dkimDomain,
-			keySelector: dkimSelector,
-			privateKey: dkimPrivateKey.replace(/\\n/g, "\n"),
-		}
-	}
+	const maxRetries = parseMaxRetries(env, prefix)
+	if (maxRetries !== undefined) options.maxRetries = maxRetries
+	const dkim = parseDkimConfig(env, prefix)
+	if (dkim) options.dkim = dkim
 
 	return options
 }

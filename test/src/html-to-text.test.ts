@@ -235,3 +235,19 @@ it("self-closing <br /> is treated same as <br>", () => {
 expect(htmlToText("a<br />b")).toBe("a\nb")
 })
 })
+
+describe("HTML entity edge cases", () => {
+	it("numeric entity out of Unicode range is preserved as-is", () => {
+		const result = htmlToText("val=&#1114112;end")
+		expect(result).toBe("val=&#1114112;end")
+	})
+
+	it("hex entity out of Unicode range is preserved as-is", () => {
+		const result = htmlToText("val=&#x200000;end")
+		expect(result).toBe("val=&#x200000;end")
+	})
+
+	it("valid numeric entities are still decoded", () => {
+		expect(htmlToText("&#65;&#66;&#67;")).toBe("ABC")
+	})
+})

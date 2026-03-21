@@ -23,7 +23,6 @@ import {
 	type SmtpCapabilities,
 	type WorkerMailerOptions,
 } from "./types"
-
 export class WorkerMailer implements Mailer {
 	private transport: SmtpTransport
 	private capabilities: SmtpCapabilities = emptyCapabilities
@@ -73,11 +72,18 @@ export class WorkerMailer implements Mailer {
 		this.logger = new Logger(options.logLevel, `[WorkerMailer:${this.host}:${this.port}]`)
 		this.transport = this.createTransport()
 	}
-
 	static async connect(options: WorkerMailerOptions): Promise<WorkerMailer> {
 		const mailer = new WorkerMailer(options)
-		await mailer.initializeSmtpSession()
-		mailer.hooks?.onConnected?.({ host: mailer.host, port: mailer.port })
+		try {
+			await mailer.initializeSmtpSession()
+			await tryHook(mailer.logger, "onConnected", mailer.hooks?.onConnected, {
+				host: mailer.host,
+				port: mailer.port,
+			})
+		} catch (e) {
+			mailer.transport.safeClose()
+			throw e
+		}
 		mailer
 			.start()
 			.catch((e) => mailer.reportFatalError(e instanceof Error ? e : new Error(String(e))))
@@ -143,11 +149,15 @@ export class WorkerMailer implements Mailer {
 	}
 	private async executeSend(): Promise<void> {
 		if (!this.emailSending) return
-		const startTime = Date.now()
 		const email = this.emailSending
 		const allRecipients = [...(email.to ?? []), ...(email.cc ?? []), ...(email.bcc ?? [])]
 		const needsUtf8 =
 			hasNonAscii(email.from.email) || allRecipients.some((r) => hasNonAscii(r.email))
+		if (needsUtf8 && !this.capabilities.supportsSmtpUtf8) {
+			throw new ConfigurationError(
+				"Non-ASCII addresses require SMTPUTF8 but server does not support it",
+			)
+		}
 		await mailFrom({
 			...this.dsnCtx,
 			fromEmail: email.from.email,
@@ -155,6 +165,15 @@ export class WorkerMailer implements Mailer {
 			smtpUtf8: needsUtf8,
 		})
 		await rcptTo({ ...this.dsnCtx, recipients: allRecipients, dsnOverride: email.dsnOverride })
+		const result = await this.buildAndSendBody(
+			email,
+			allRecipients.map((r) => r.email),
+		)
+		email.setSentResult(result)
+		await tryHook(this.logger, "afterSend", this.hooks?.afterSend, email.options, result)
+	}
+	private async buildAndSendBody(email: Email, recipientEmails: string[]): Promise<SendResult> {
+		const startTime = Date.now()
 		await dataCommand(this.transport)
 		let rawMessage = email.getRawMessage()
 		if (this.dkimOptions) {
@@ -163,15 +182,13 @@ export class WorkerMailer implements Mailer {
 		}
 		const smtpData = `${applyDotStuffing(rawMessage)}\r\n.\r\n`
 		const bodyResponse = await sendBody(this.transport, smtpData)
-		const result: SendResult = {
+		return {
 			messageId: email.headers["Message-ID"] ?? "",
-			accepted: allRecipients.map((u) => u.email),
+			accepted: recipientEmails,
 			rejected: [],
 			responseTime: Date.now() - startTime,
 			response: bodyResponse.trim(),
 		}
-		email.setSentResult(result)
-		await tryHook(this.logger, "afterSend", this.hooks?.afterSend, email.options, result)
 	}
 	private async handleSendFailure(e: unknown, attempt: number): Promise<boolean> {
 		if (!this.emailSending) return true
@@ -226,15 +243,18 @@ export class WorkerMailer implements Mailer {
 		while (this.emailToBeSent.length > 0) (await this.emailToBeSent.dequeue()).setSentError(err)
 		this.emailToBeSent.close()
 		await this.transport.quit().catch(() => this.logger.debug("[WorkerMailer] QUIT failed"))
-		this.hooks?.onDisconnected?.({ reason: error?.message })
+		const disconnectInfo = { reason: error?.message }
+		await tryHook(this.logger, "onDisconnected", this.hooks?.onDisconnected, disconnectInfo)
 	}
 	async [Symbol.asyncDispose](): Promise<void> {
 		await this.close()
 	}
 	async ping(): Promise<boolean> {
-		return this.active && this.transport ? noop(this.transport) : false
+		return this.active ? noop(this.transport) : false
 	}
 	private reportFatalError(error: Error): void {
-		this.hooks?.onFatalError ? this.hooks.onFatalError(error) : console.error(error)
+		const hook = this.hooks?.onFatalError
+		if (hook) tryHook(this.logger, "onFatalError", hook, error).catch(() => {})
+		else console.error(error)
 	}
 }

@@ -46,7 +46,11 @@ export class MockMailer implements Mailer {
 			responseTime: this.mockOptions.simulateDelay ?? 0,
 			response: "250 2.0.0 Ok: queued as mock",
 		}
-		this._sentEmails.push({ options, result, sentAt: new Date() })
+		this._sentEmails.push({
+			options: { ...options },
+			result: { ...result },
+			sentAt: new Date(),
+		})
 		return result
 	}
 

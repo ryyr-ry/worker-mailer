@@ -97,9 +97,19 @@ async function authCramMd5(
 	const challenge = fromBase64(challengeWithBase64Encoded)
 
 	const keyData = encode(credentials.password)
-	const key = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "MD5" }, false, [
-		"sign",
-	])
+	let key: CryptoKey
+	try {
+		key = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "MD5" }, false, [
+			"sign",
+		])
+	} catch (e) {
+		if (e instanceof Error && e.name === "NotSupportedError") {
+			throw new SmtpAuthError(
+				"[WorkerMailer] CRAM-MD5 is not supported in this runtime (MD5 unavailable via Web Crypto). Use PLAIN or LOGIN over TLS instead.",
+			)
+		}
+		throw e
+	}
 
 	const challengeData = encode(challenge)
 	const signature = await crypto.subtle.sign("HMAC", key, challengeData)

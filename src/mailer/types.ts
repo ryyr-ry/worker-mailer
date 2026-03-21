@@ -64,10 +64,10 @@ export type SmtpCapabilities = {
 	supportsSmtpUtf8: boolean
 }
 
-export const emptyCapabilities: SmtpCapabilities = {
+export const emptyCapabilities: Readonly<SmtpCapabilities> = Object.freeze({
 	supportsDSN: false,
 	allowAuth: false,
-	authTypeSupported: [],
+	authTypeSupported: Object.freeze([]) as unknown as AuthType[],
 	supportsStartTls: false,
 	supportsSmtpUtf8: false,
-}
+})

@@ -42,6 +42,12 @@ export async function initializeSession(
 					"Enable secure (port 465) or startTls (port 587) to encrypt the connection",
 			)
 		}
+		if (!capabilities.allowAuth) {
+			throw new ConfigurationError(
+				"[WorkerMailer] Credentials provided but server does not advertise AUTH support. " +
+					"Verify the server configuration or remove credentials.",
+			)
+		}
 		await authenticate({
 			transport,
 			credentials: config.credentials,

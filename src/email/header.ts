@@ -98,14 +98,28 @@ export function foldHeaderLine(line: string, maxLen = 78): string {
 }
 
 function formatUserAddress(user: User): string {
-	if (user.name) return `"${encodeHeader(user.name)}" <${user.email}>`
-	return user.email
+	if (!user.name) return user.email
+	if (isAsciiOnly(user.name)) {
+		const escaped = user.name.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+		return `"${escaped}" <${user.email}>`
+	}
+	return `${encodeHeader(user.name)} <${user.email}>`
 }
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const MONTH_NAMES = [
-	"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec",
 ]
 
 function formatRfc5322Date(date: Date): string {

@@ -139,12 +139,21 @@ export async function resolveDkimKey(options: DkimOptions, cached?: CryptoKey): 
 }
 
 export async function signDkim(rawMessage: string, options: DkimOptions): Promise<string> {
+	if (/[\r\n\s;]/.test(options.domainName)) {
+		throw new DkimError("[DKIM] domainName contains invalid characters")
+	}
+	if (/[\r\n\s;]/.test(options.keySelector)) {
+		throw new DkimError("[DKIM] keySelector contains invalid characters")
+	}
 	const { headers: headerSection, body: bodySection } = splitMessage(rawMessage)
 	const headers = parseHeaders(headerSection)
 	const canon = parseCanonicalization(options.canonicalization ?? "relaxed/relaxed")
 	const canonicalizedBody = canonBody(bodySection, canon.body)
 	const bodyHash = await hashBody(canonicalizedBody)
 	const headerNames = options.headerFieldNames ?? selectDefaultHeaders(headers)
+	if (!headerNames.some((n) => n.toLowerCase() === "from")) {
+		throw new DkimError("[DKIM] 'from' header must be included in signed headers (RFC 6376)")
+	}
 	const key =
 		typeof options.privateKey === "string"
 			? await importDkimKey(options.privateKey)

@@ -11,6 +11,6 @@ export async function sendOnce(
 	try {
 		return await mailer.send(emailOptions)
 	} finally {
-		await mailer.close()
+		await mailer.close().catch(() => {})
 	}
 }

@@ -63,6 +63,9 @@ function validateCalendarOptions(options: CalendarEventOptions): void {
 	if (options.reminderMinutes !== undefined && options.reminderMinutes < 0) {
 		throw new CalendarValidationError("[Calendar] reminderMinutes must not be negative")
 	}
+	if (options.uid !== undefined && /[\r\n]/.test(options.uid)) {
+		throw new CalendarValidationError("[Calendar] UID must not contain CR or LF characters")
+	}
 }
 
 function sanitizeEmail(email: string): string {
@@ -72,10 +75,20 @@ function sanitizeEmail(email: string): string {
 	return email
 }
 
+function quoteParamValue(value: string): string {
+	if (/[\r\n]/.test(value)) {
+		throw new CalendarValidationError(
+			"[Calendar] Parameter value must not contain CR or LF characters",
+		)
+	}
+	const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+	return `"${escaped}"`
+}
+
 function appendOrganizer(lines: string[], organizer: { name?: string; email: string }): void {
 	const email = sanitizeEmail(organizer.email)
 	if (organizer.name) {
-		lines.push(`ORGANIZER;CN=${escapeIcalText(organizer.name)}:mailto:${email}`)
+		lines.push(`ORGANIZER;CN=${quoteParamValue(organizer.name)}:mailto:${email}`)
 	} else {
 		lines.push(`ORGANIZER:mailto:${email}`)
 	}
@@ -88,7 +101,7 @@ function appendAttendees(
 	if (!attendees) return
 	for (const att of attendees) {
 		const rsvp = att.rsvp !== false ? "TRUE" : "FALSE"
-		const cn = att.name ? `;CN=${escapeIcalText(att.name)}` : ""
+		const cn = att.name ? `;CN=${quoteParamValue(att.name)}` : ""
 		const email = sanitizeEmail(att.email)
 		lines.push(`ATTENDEE;ROLE=REQ-PARTICIPANT;RSVP=${rsvp}${cn}:mailto:${email}`)
 	}

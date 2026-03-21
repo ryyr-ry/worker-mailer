@@ -84,7 +84,8 @@ function convertHorizontalRules(html: string): string {
 }
 
 function stripTags(html: string): string {
-	return html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+	return html
+		.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
 		.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
 		.replace(/<[^>]+>/g, "")
 }
@@ -113,10 +114,24 @@ function decodeEntities(text: string): string {
 	for (const [entity, char] of Object.entries(entities)) {
 		result = result.replaceAll(entity, char)
 	}
-	result = result.replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-	result = result.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) =>
-		String.fromCodePoint(Number.parseInt(hex, 16)),
-	)
+	result = result.replace(/&#(\d+);/g, (match, code) => {
+		const cp = Number(code)
+		if (cp < 0 || cp > 0x10ffff) return match
+		try {
+			return String.fromCodePoint(cp)
+		} catch {
+			return match
+		}
+	})
+	result = result.replace(/&#x([0-9a-fA-F]+);/g, (match, hex) => {
+		const cp = Number.parseInt(hex, 16)
+		if (cp < 0 || cp > 0x10ffff) return match
+		try {
+			return String.fromCodePoint(cp)
+		} catch {
+			return match
+		}
+	})
 	return result
 }
 

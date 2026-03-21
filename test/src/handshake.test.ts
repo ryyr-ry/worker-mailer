@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { SmtpCommandError, SmtpConnectionError } from "../../src/errors"
 import Logger, { LogLevel } from "../../src/logger"
-import { greet, ehlo, parseCapabilities, startTls } from "../../src/mailer/handshake"
+import { ehlo, greet, parseCapabilities, startTls } from "../../src/mailer/handshake"
 import { SmtpTransport } from "../../src/mailer/transport"
 
 const logger = new Logger(LogLevel.NONE, "[test]")
@@ -10,11 +10,13 @@ const enc = (s: string) => new TextEncoder().encode(s)
 function mockTransport(responses: string[]) {
 	let idx = 0
 	const reader = {
-		read: vi.fn().mockImplementation(() =>
-			idx < responses.length
-				? Promise.resolve({ value: enc(responses[idx++]) })
-				: Promise.resolve({ done: true }),
-		),
+		read: vi
+			.fn()
+			.mockImplementation(() =>
+				idx < responses.length
+					? Promise.resolve({ value: enc(responses[idx++]) })
+					: Promise.resolve({ done: true }),
+			),
 		releaseLock: vi.fn(),
 	}
 	const writer = { write: vi.fn().mockResolvedValue(undefined), releaseLock: vi.fn() }
@@ -164,10 +166,7 @@ describe("ehlo (RFC 5321 EHLO command)", () => {
 	})
 
 	it("falls back to HELO on non-2xx/non-421 and returns empty capabilities", async () => {
-		const { transport } = mockTransport([
-			"502 Command not implemented\r\n",
-			"250 OK\r\n",
-		])
+		const { transport } = mockTransport(["502 Command not implemented\r\n", "250 OK\r\n"])
 		const caps = await ehlo(transport, "client.example.com")
 		expect(caps.allowAuth).toBe(false)
 		expect(caps.authTypeSupported).toEqual([])

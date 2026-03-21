@@ -3,7 +3,6 @@
  * Builds EmailOptions using method chaining
  */
 
-import { EmailValidationError } from "./errors"
 import type {
 	Attachment,
 	CalendarEventPart,
@@ -12,6 +11,7 @@ import type {
 	InlineAttachment,
 	User,
 } from "./email/types"
+import { EmailValidationError } from "./errors"
 
 type Recipient = string | User
 
@@ -24,23 +24,17 @@ export class MailBuilder {
 	}
 
 	to(...recipients: Recipient[]): this {
-		this.opts.to = recipients.length === 1
-			? recipients[0]
-			: (recipients as string[] | User[])
+		this.opts.to = recipients.length === 1 ? recipients[0] : (recipients as string[] | User[])
 		return this
 	}
 
 	cc(...recipients: Recipient[]): this {
-		this.opts.cc = recipients.length === 1
-			? recipients[0]
-			: (recipients as string[] | User[])
+		this.opts.cc = recipients.length === 1 ? recipients[0] : (recipients as string[] | User[])
 		return this
 	}
 
 	bcc(...recipients: Recipient[]): this {
-		this.opts.bcc = recipients.length === 1
-			? recipients[0]
-			: (recipients as string[] | User[])
+		this.opts.bcc = recipients.length === 1 ? recipients[0] : (recipients as string[] | User[])
 		return this
 	}
 
@@ -80,10 +74,7 @@ export class MailBuilder {
 	}
 
 	inlineAttach(attachment: InlineAttachment): this {
-		this.opts.inlineAttachments = [
-			...(this.opts.inlineAttachments ?? []),
-			attachment,
-		]
+		this.opts.inlineAttachments = [...(this.opts.inlineAttachments ?? []), attachment]
 		return this
 	}
 

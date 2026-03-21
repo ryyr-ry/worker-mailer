@@ -17,11 +17,30 @@ export class WorkerMailerPool implements Mailer {
 	}
 
 	async connect(): Promise<this> {
+		if (this.mailers.length > 0) {
+			throw new SmtpConnectionError("[WorkerMailerPool] Pool is already connected")
+		}
 		const connections = Array.from({ length: this.poolSize }, () =>
 			WorkerMailer.connect(this.options),
 		)
-		const mailers = await Promise.all(connections)
-		this.mailers.push(...mailers)
+		const results = await Promise.allSettled(connections)
+		const connected: WorkerMailer[] = []
+		const errors: Error[] = []
+		for (const result of results) {
+			if (result.status === "fulfilled") {
+				connected.push(result.value)
+			} else {
+				const reason = result.reason
+				errors.push(reason instanceof Error ? reason : new Error(String(reason)))
+			}
+		}
+		if (errors.length > 0) {
+			await Promise.allSettled(connected.map((m) => m.close()))
+			throw new SmtpConnectionError(
+				`[WorkerMailerPool] ${errors.length}/${this.poolSize} connections failed: ${errors[0].message}`,
+			)
+		}
+		this.mailers.push(...connected)
 		return this
 	}
 

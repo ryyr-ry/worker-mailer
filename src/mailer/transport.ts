@@ -75,9 +75,12 @@ export class SmtpTransport {
 	}
 
 	async quit(): Promise<void> {
-		await this.writeLine("QUIT")
-		await this.readTimeout()
-		this.socket.close().catch(() => this.logger.error("[WorkerMailer] Failed to close socket"))
+		try {
+			await this.writeLine("QUIT")
+			await this.readTimeout()
+		} finally {
+			this.safeClose()
+		}
 	}
 
 	safeClose(): void {
