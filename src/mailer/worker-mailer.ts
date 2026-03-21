@@ -7,9 +7,18 @@ import { ConfigurationError, CrlfInjectionError, SmtpConnectionError } from "../
 import Logger from "../logger"
 import type { SendResult } from "../result"
 import { BlockingQueue, backoff } from "../utils"
-import { dataCommand, hasNonAscii, mailFrom, noop, rcptTo, rset, sendBody } from "./commands"
+import {
+	dataCommand,
+	hasNonAscii,
+	mailFrom,
+	noop,
+	rcptTo,
+	rcptToCollect,
+	rset,
+	sendBody,
+} from "./commands"
 import { inferSecurity, validatePortSecurity } from "./config"
-import { tryHook } from "./hook-utils"
+import { PluginRunner } from "./plugin"
 import { reconnect } from "./reconnect"
 import { initializeSession } from "./session"
 import { SmtpTransport } from "./transport"
@@ -19,7 +28,7 @@ import {
 	emptyCapabilities,
 	type Mailer,
 	SendCancelledError,
-	type SendHooks,
+	type SendOptions,
 	type SmtpCapabilities,
 	type WorkerMailerOptions,
 } from "./types"
@@ -37,7 +46,7 @@ export class WorkerMailer implements Mailer {
 	private readonly ehloHostname: string
 	private readonly maxRetries: number
 	private readonly autoReconnect: boolean
-	private readonly hooks?: SendHooks
+	private readonly pluginRunner: PluginRunner
 	private readonly logger: Logger
 	private readonly dsn: WorkerMailerOptions["dsn"]
 	private readonly dkimOptions?: DkimOptions
@@ -67,19 +76,16 @@ export class WorkerMailer implements Mailer {
 		this.ehloHostname = options.ehloHostname || this.host
 		this.maxRetries = options.maxRetries ?? 3
 		this.autoReconnect = options.autoReconnect ?? false
-		this.hooks = options.hooks
 		this.dkimOptions = options.dkim
 		this.logger = new Logger(options.logLevel, `[WorkerMailer:${this.host}:${this.port}]`)
+		this.pluginRunner = new PluginRunner(this.logger, options.hooks, options.plugins)
 		this.transport = this.createTransport()
 	}
 	static async connect(options: WorkerMailerOptions): Promise<WorkerMailer> {
 		const mailer = new WorkerMailer(options)
 		try {
 			await mailer.initializeSmtpSession()
-			await tryHook(mailer.logger, "onConnected", mailer.hooks?.onConnected, {
-				host: mailer.host,
-				port: mailer.port,
-			})
+			await mailer.pluginRunner.onConnected({ host: mailer.host, port: mailer.port })
 		} catch (e) {
 			mailer.transport.safeClose()
 			throw e
@@ -89,17 +95,18 @@ export class WorkerMailer implements Mailer {
 			.catch((e) => mailer.reportFatalError(e instanceof Error ? e : new Error(String(e))))
 		return mailer
 	}
-	public async send(options: EmailOptions): Promise<SendResult> {
+	public async send(options: EmailOptions, sendOptions?: SendOptions): Promise<SendResult> {
 		if (this.emailToBeSent.closed) {
 			throw new SmtpConnectionError("[WorkerMailer] Send failed: mailer is closed")
 		}
 		let emailOptions = options
-		if (this.hooks?.beforeSend) {
-			const hookResult = await this.hooks.beforeSend(options)
-			if (hookResult === false) throw new SendCancelledError()
-			if (hookResult && typeof hookResult === "object") emailOptions = hookResult
+		if (this.pluginRunner.hasBeforeSend) {
+			const result = await this.pluginRunner.beforeSend(options)
+			if (result === false) throw new SendCancelledError()
+			emailOptions = result
 		}
 		const email = new Email(emailOptions)
+		email.isDryRun = sendOptions?.dryRun === true
 		this.emailToBeSent.enqueue(email)
 		return email.sentResult
 	}
@@ -141,7 +148,7 @@ export class WorkerMailer implements Mailer {
 			const msg = `[WorkerMailer] Send failed: max retries (${this.maxRetries}) exceeded`
 			const error = new SmtpConnectionError(msg)
 			email.setSentError(error)
-			await tryHook(this.logger, "onSendError", this.hooks?.onSendError, email.options, error)
+			await this.pluginRunner.onSendError(email.options, error)
 		}
 	}
 	private get dsnCtx() {
@@ -164,13 +171,38 @@ export class WorkerMailer implements Mailer {
 			dsnOverride: email.dsnOverride,
 			smtpUtf8: needsUtf8,
 		})
+		if (email.isDryRun) {
+			await this.executeDryRun(email, allRecipients)
+			return
+		}
 		await rcptTo({ ...this.dsnCtx, recipients: allRecipients, dsnOverride: email.dsnOverride })
 		const result = await this.buildAndSendBody(
 			email,
 			allRecipients.map((r) => r.email),
 		)
 		email.setSentResult(result)
-		await tryHook(this.logger, "afterSend", this.hooks?.afterSend, email.options, result)
+		await this.pluginRunner.afterSend(email.options, result)
+	}
+	private async executeDryRun(
+		email: Email,
+		allRecipients: ReadonlyArray<{ email: string }>,
+	): Promise<void> {
+		const startTime = Date.now()
+		const { accepted, rejected } = await rcptToCollect({
+			...this.dsnCtx,
+			recipients: allRecipients,
+			dsnOverride: email.dsnOverride,
+		})
+		await rset(this.transport)
+		const result: SendResult = {
+			messageId: "",
+			accepted,
+			rejected: rejected.map((r) => r.email),
+			responseTime: Date.now() - startTime,
+			response: "DRY RUN: no message sent",
+		}
+		email.setSentResult(result)
+		await this.pluginRunner.afterSend(email.options, result)
 	}
 	private async buildAndSendBody(email: Email, recipientEmails: string[]): Promise<SendResult> {
 		const startTime = Date.now()
@@ -198,7 +230,7 @@ export class WorkerMailer implements Mailer {
 			const email = this.emailSending
 			const error = e instanceof Error ? e : new Error(String(e))
 			email.setSentError(e)
-			await tryHook(this.logger, "onSendError", this.hooks?.onSendError, email.options, error)
+			await this.pluginRunner.onSendError(email.options, error)
 			return true
 		}
 		try {
@@ -230,9 +262,10 @@ export class WorkerMailer implements Mailer {
 				this.transport = this.createTransport()
 				this.capabilities = emptyCapabilities
 				await this.initializeSmtpSession()
+				await this.pluginRunner.onConnected({ host: this.host, port: this.port })
 			},
 			logger: this.logger,
-			hooks: this.hooks,
+			pluginRunner: this.pluginRunner,
 		})
 	}
 	public async close(error?: Error): Promise<void> {
@@ -244,7 +277,7 @@ export class WorkerMailer implements Mailer {
 		this.emailToBeSent.close()
 		await this.transport.quit().catch(() => this.logger.debug("[WorkerMailer] QUIT failed"))
 		const disconnectInfo = { reason: error?.message }
-		await tryHook(this.logger, "onDisconnected", this.hooks?.onDisconnected, disconnectInfo)
+		await this.pluginRunner.onDisconnected(disconnectInfo)
 	}
 	async [Symbol.asyncDispose](): Promise<void> {
 		await this.close()
@@ -253,8 +286,10 @@ export class WorkerMailer implements Mailer {
 		return this.active ? noop(this.transport) : false
 	}
 	private reportFatalError(error: Error): void {
-		const hook = this.hooks?.onFatalError
-		if (hook) tryHook(this.logger, "onFatalError", hook, error).catch(() => {})
-		else console.error(error)
+		if (this.pluginRunner.hasFatalErrorHandler) {
+			this.pluginRunner.onFatalError(error).catch(() => {})
+		} else {
+			console.error(error)
+		}
 	}
 }

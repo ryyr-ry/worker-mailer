@@ -18,8 +18,9 @@
 - 📅 **カレンダー招待** — iCalendar (.ics) 生成とMIME統合
 - 🔏 **DKIM署名** — Web Crypto API によるRSA-SHA256署名
 - 🔒 **SMTP認証** — `plain`, `login`, `CRAM-MD5`
-- 🪝 **送信フック** — `beforeSend` / `afterSend` / ライフサイクルイベントフック
-- 🧪 **モックメーラー** — テスト用アサーションヘルパー付き `MockMailer`
+- 🪝 **送信フックとプラグイン** — `beforeSend` / `afterSend` / ライフサイクルの拡張ポイント
+- 🧪 **モックメーラーとアサーション** — `MockMailer` とチェーン可能なテストヘルパー
+- 🛰️ **テレメトリとドライラン** — DATA を送らずに送信経路を検証
 - 👁️ **メールプレビュー** — 送信せずにMIME内容を確認する `previewEmail()`
 - 🏓 **ヘルスチェック** — SMTP NOOPコマンドによる `ping()`
 - ⚡ **ゼロコンフィグヘルパー** — `sendOnce()`, `fromEnv()`, `createFromEnv()` で環境変数を自動読み取り
@@ -167,12 +168,38 @@ await mock.send({
 })
 
 console.log(mock.sendCount) // 1
-console.log(mock.lastEmail?.subject) // "テスト"
+console.log(mock.lastEmail?.options.subject) // "テスト"
 console.log(mock.hasSentTo("user@example.com")) // true
 console.log(mock.hasSentWithSubject("テスト")) // true
 console.log(mock.sentEmails) // 送信済みメールの読み取り専用配列
 
 mock.clear() // 状態をリセット
+```
+
+### アサーションヘルパー
+
+```typescript
+import { MockMailer, assertSent } from "@ryyr/worker-mailer/testing"
+
+const mock = new MockMailer()
+
+await mock.send({
+	from: "app@example.com",
+	to: "user@example.com",
+	subject: "Welcome",
+	text: "Hello",
+	headers: { "X-Trace": "abc123" },
+})
+
+assertSent(mock)
+	.from("app@example.com")
+	.to("user@example.com")
+	.withSubject("Welcome")
+	.withHeader("X-Trace", "abc123")
+	.exists()
+
+mock.assertSendCount(1)
+mock.assertNthSent(1).withText("Hello").exists()
 ```
 
 ### エラーと遅延のシミュレーション
@@ -354,6 +381,50 @@ type SendHooks = {
 	onReconnecting?: (info: { attempt: number }) => void
 	onFatalError?: (error: Error) => void
 }
+```
+
+### プラグイン・テレメトリ・ドライラン
+
+既存の `hooks` はそのまま使えます。加えて、再利用可能な拡張は `plugins` で登録できます。
+
+```typescript
+import type { MailPlugin } from "@ryyr/worker-mailer"
+import { telemetryPlugin } from "@ryyr/worker-mailer/plugins"
+
+const auditPlugin: MailPlugin = {
+	name: "audit",
+	beforeSend: (email) => ({ ...email, subject: `[AUDIT] ${email.subject}` }),
+}
+
+const mailer = await WorkerMailer.connect({
+	host: "smtp.example.com",
+	port: 587,
+	username: "user@example.com",
+	password: "password",
+	authType: ["plain"],
+	plugins: [
+		auditPlugin,
+		telemetryPlugin({
+			onEvent: (event) => {
+				console.log(event.type, event)
+			},
+		}),
+	],
+})
+
+const result = await mailer.send(
+	{
+		from: "sender@example.com",
+		to: ["ok@example.com", "reject@example.com"],
+		subject: "Recipient validation",
+		text: "This is a dry run.",
+	},
+	{ dryRun: true },
+)
+
+console.log(result.accepted)
+console.log(result.rejected)
+console.log(result.response) // "DRY RUN: no message sent"
 ```
 
 ## メールプレビュー
@@ -861,7 +932,14 @@ type WorkerMailerOptions = {
 	maxRetries?: number // リトライ回数（デフォルト: 3）
 	autoReconnect?: boolean // 自動再接続（デフォルト: false）
 	hooks?: SendHooks // 送信・ライフサイクルフック
+	plugins?: MailPlugin[] // 再利用可能な送信・ライフサイクルプラグイン
 	dkim?: DkimOptions // DKIM署名設定
+}
+```
+
+```typescript
+type SendOptions = {
+	dryRun?: boolean // Validate MAIL FROM / RCPT TO only, skip DATA
 }
 ```
 

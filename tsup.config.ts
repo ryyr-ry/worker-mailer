@@ -16,6 +16,7 @@ export default defineConfig({
 		"html-to-text": "./src/html-to-text.ts",
 		template: "./src/template.ts",
 		builder: "./src/builder.ts",
+		plugins: "./src/plugins/index.ts",
 	},
 	dts: true,
 	shims: true,

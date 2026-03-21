@@ -31,6 +31,8 @@ export class Email {
 
 	public readonly headers: Record<string, string>
 
+	public isDryRun = false
+
 	public setSentResult!: (result: SendResult) => void
 	public setSentError!: (e: unknown) => void
 
@@ -75,6 +77,7 @@ export class Email {
 		this.dsnOverride = options.dsnOverride
 		this.headers = options.headers ? { ...options.headers } : {}
 
+		this.validateRecipients()
 		this.validateNoCRLF()
 		this.validateEmailAddresses()
 		this.validateAttachments()
@@ -94,6 +97,12 @@ export class Email {
 	}
 
 	private static readonly CRLF_PATTERN = /[\r\n]/
+
+	private validateRecipients() {
+		if (this.to.length === 0) {
+			throw new EmailValidationError("At least one to recipient must be provided")
+		}
+	}
 
 	private validateNoCRLF() {
 		if (Email.CRLF_PATTERN.test(this.subject)) {

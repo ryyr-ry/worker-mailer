@@ -116,6 +116,17 @@ describe("WorkerMailerPool", () => {
 		pool.close().catch(() => {})
 	})
 
+	it("pool forwards send options to mailers", async () => {
+		const connSession = [GREETING, EHLO_STARTTLS, TLS_OK, EHLO_AUTH, AUTH_OK, OK, OK, OK, QUIT_OK]
+		setup([connSession])
+		const pool = new WorkerMailerPool({ ...BASE_OPTS, poolSize: 1 })
+		await pool.connect()
+		const result = await pool.send(EMAIL, { dryRun: true })
+		expect(result.messageId).toBe("")
+		expect(result.response).toBe("DRY RUN: no message sent")
+		await pool.close()
+	})
+
 	it("pool close disposes all connections", async () => {
 		const connSession = [GREETING, EHLO_STARTTLS, TLS_OK, EHLO_AUTH, AUTH_OK, QUIT_OK]
 		setup([connSession, connSession])

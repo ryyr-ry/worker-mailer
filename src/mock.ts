@@ -1,7 +1,15 @@
-import type { EmailOptions } from "./email"
 import { Email } from "./email/email"
+import type { EmailOptions } from "./email/types"
 import { SmtpConnectionError } from "./errors"
-import type { Mailer } from "./mailer"
+import type { Mailer, SendOptions } from "./mailer"
+import {
+	assertNotSentTo,
+	assertNthSent,
+	assertSendCount,
+	assertSent,
+	type SentEmailAssertion,
+} from "./mock-assertions"
+import { normalizeRecipients, type SentEmail } from "./mock-shared"
 import type { SendResult } from "./result"
 
 export type MockMailerOptions = {
@@ -9,11 +17,7 @@ export type MockMailerOptions = {
 	simulateDelay?: number
 }
 
-type SentEmail = {
-	options: EmailOptions
-	result: SendResult
-	sentAt: Date
-}
+export type { SentEmail } from "./mock-shared"
 
 export class MockMailer implements Mailer {
 	private readonly mockOptions: MockMailerOptions
@@ -25,7 +29,7 @@ export class MockMailer implements Mailer {
 		this.mockOptions = options ?? {}
 	}
 
-	async send(options: EmailOptions): Promise<SendResult> {
+	async send(options: EmailOptions, sendOptions?: SendOptions): Promise<SendResult> {
 		if (!this._connected) throw new SmtpConnectionError("[MockMailer] Not connected")
 		new Email(options)
 		if (this.mockOptions.simulateDelay) {
@@ -33,19 +37,16 @@ export class MockMailer implements Mailer {
 		}
 		if (this.mockOptions.simulateError) throw this.mockOptions.simulateError
 
-		this.messageCounter++
-		const messageId = `<mock-${this.messageCounter}-${Date.now()}@mock.local>`
-		const allRecipients = normalizeRecipients(options.to)
-			.concat(options.cc ? normalizeRecipients(options.cc) : [])
-			.concat(options.bcc ? normalizeRecipients(options.bcc) : [])
-
-		const result: SendResult = {
-			messageId,
-			accepted: allRecipients,
-			rejected: [],
-			responseTime: this.mockOptions.simulateDelay ?? 0,
-			response: "250 2.0.0 Ok: queued as mock",
+		const allRecipients = getRecipientEmails(options)
+		if (sendOptions?.dryRun) {
+			return createDryRunResult(allRecipients, this.mockOptions.simulateDelay ?? 0)
 		}
+
+		const result = createMockSendResult(
+			allRecipients,
+			++this.messageCounter,
+			this.mockOptions.simulateDelay ?? 0,
+		)
 		this._sentEmails.push({
 			options: { ...options },
 			result: { ...result },
@@ -82,6 +83,22 @@ export class MockMailer implements Mailer {
 		return this._sentEmails.length
 	}
 
+	assertSent(): SentEmailAssertion {
+		return assertSent(this)
+	}
+
+	assertNthSent(position: number): SentEmailAssertion {
+		return assertNthSent(this, position)
+	}
+
+	assertNotSentTo(email: string): void {
+		assertNotSentTo(this, email)
+	}
+
+	assertSendCount(expected: number): void {
+		assertSendCount(this, expected)
+	}
+
 	hasSentTo(email: string): boolean {
 		return this._sentEmails.some((e) => normalizeRecipients(e.options.to).includes(email))
 	}
@@ -97,16 +114,34 @@ export class MockMailer implements Mailer {
 	}
 }
 
-function normalizeRecipients(
-	recipients:
-		| string
-		| string[]
-		| { name?: string; email: string }
-		| { name?: string; email: string }[],
-): string[] {
-	if (typeof recipients === "string") return [recipients]
-	if (Array.isArray(recipients)) {
-		return recipients.map((r) => (typeof r === "string" ? r : r.email))
+export { normalizeRecipients } from "./mock-shared"
+
+function getRecipientEmails(options: EmailOptions): string[] {
+	return normalizeRecipients(options.to)
+		.concat(options.cc ? normalizeRecipients(options.cc) : [])
+		.concat(options.bcc ? normalizeRecipients(options.bcc) : [])
+}
+
+function createDryRunResult(accepted: string[], responseTime: number): SendResult {
+	return {
+		messageId: "",
+		accepted,
+		rejected: [],
+		responseTime,
+		response: "DRY RUN: no message sent",
 	}
-	return [recipients.email]
+}
+
+function createMockSendResult(
+	accepted: string[],
+	messageCounter: number,
+	responseTime: number,
+): SendResult {
+	return {
+		messageId: `<mock-${messageCounter}-${Date.now()}@mock.local>`,
+		accepted,
+		rejected: [],
+		responseTime,
+		response: "250 2.0.0 Ok: queued as mock",
+	}
 }

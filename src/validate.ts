@@ -4,6 +4,7 @@ const MAX_LOCAL_LENGTH = 64
 const MAX_DOMAIN_LENGTH = 253
 const MAX_TOTAL_LENGTH = 320
 const MAX_LABEL_LENGTH = 63
+const INVALID_UNQUOTED_LOCAL_PART = /[\s"(),:;<>@[\]\\]/
 
 function containsControlChar(str: string): boolean {
 	for (let i = 0; i < str.length; i++) {
@@ -52,6 +53,9 @@ function validateLocalPart(local: string): ValidationResult | undefined {
 	} else {
 		if (local.includes("@")) {
 			return { valid: false, reason: "Local part contains unquoted @" }
+		}
+		if (INVALID_UNQUOTED_LOCAL_PART.test(local)) {
+			return { valid: false, reason: "Local part contains invalid unquoted characters" }
 		}
 	}
 	if (local.startsWith(".")) return { valid: false, reason: "Local part starts with a dot" }

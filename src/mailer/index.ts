@@ -1,4 +1,5 @@
+export type { MailPlugin } from "./plugin"
 export { WorkerMailerPool } from "./pool"
-export type { AuthType, Mailer, SendHooks, WorkerMailerOptions } from "./types"
+export type { AuthType, Mailer, SendHooks, SendOptions, WorkerMailerOptions } from "./types"
 export { SendCancelledError } from "./types"
 export { WorkerMailer } from "./worker-mailer"

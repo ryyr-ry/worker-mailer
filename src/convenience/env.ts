@@ -32,10 +32,15 @@ function parseBoolean(value: string | undefined): boolean | undefined {
 
 function parseAuthType(value: string | undefined): AuthType[] | undefined {
 	if (value === undefined) return undefined
-	return value
+	const authTypes = value
 		.split(",")
 		.map((s) => s.trim().toLowerCase())
-		.filter((s): s is AuthType => s === "plain" || s === "login" || s === "cram-md5")
+		.filter((s) => s.length > 0)
+	const invalid = authTypes.find((s) => s !== "plain" && s !== "login" && s !== "cram-md5")
+	if (invalid) {
+		throw new ConfigurationError(`Invalid auth type "${invalid}". Expected: plain, login, cram-md5`)
+	}
+	return authTypes as AuthType[]
 }
 
 function parseLogLevel(value: string | undefined): LogLevel | undefined {

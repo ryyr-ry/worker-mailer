@@ -80,6 +80,17 @@ describe("RFC 5321 edge cases", () => {
 		expect(result).toEqual({ valid: true })
 	})
 
+	it.each([
+		"user name@example.com",
+		"user,name@example.com",
+		"user(comment)@example.com",
+	])("invalid unquoted local part characters are rejected: %s", (address) => {
+		expect(validateEmail(address)).toMatchObject({
+			valid: false,
+			reason: "Local part contains invalid unquoted characters",
+		})
+	})
+
 	it("numeric local part is valid", () => {
 		expect(validateEmail("123@example.com")).toEqual({ valid: true })
 	})

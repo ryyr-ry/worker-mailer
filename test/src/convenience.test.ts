@@ -47,6 +47,11 @@ describe("fromEnv", () => {
 		expect(opts.startTls).toBe(true)
 	})
 
+	it("SMTP_AUTH_TYPE parses preferred auth types", () => {
+		const opts = fromEnv({ ...validEnv, SMTP_AUTH_TYPE: "login, plain" })
+		expect(opts.authType).toEqual(["login", "plain"])
+	})
+
 	it("SMTP_DKIM_* sets dkim options", () => {
 		const env = {
 			...validEnv,
@@ -108,6 +113,12 @@ describe("fromEnv validation", () => {
 	it("invalid logLevel throws ConfigurationError", () => {
 		expect(() => fromEnv({ SMTP_HOST: "h", SMTP_PORT: "25", SMTP_LOG_LEVEL: "VERBOSE" })).toThrow(
 			"Invalid log level",
+		)
+	})
+
+	it("invalid authType throws ConfigurationError", () => {
+		expect(() => fromEnv({ SMTP_HOST: "h", SMTP_PORT: "25", SMTP_AUTH_TYPE: "oauth2" })).toThrow(
+			"Invalid auth type",
 		)
 	})
 

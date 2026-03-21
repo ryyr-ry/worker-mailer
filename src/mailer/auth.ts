@@ -4,6 +4,8 @@ import { encode, fromBase64, toBase64 } from "../utils"
 import type { SmtpTransport } from "./transport"
 import type { AuthType, Credentials, SmtpCapabilities } from "./types"
 
+const DEFAULT_AUTH_TYPES: readonly AuthType[] = ["plain", "login", "cram-md5"]
+
 interface AuthenticateParams {
 	transport: SmtpTransport
 	credentials: Credentials
@@ -40,7 +42,8 @@ function selectAuthType(
 	supported: readonly string[],
 	preferred: readonly AuthType[],
 ): AuthType | undefined {
-	return preferred.find((type) => supported.includes(type))
+	const orderedTypes = preferred.length > 0 ? preferred : DEFAULT_AUTH_TYPES
+	return orderedTypes.find((type) => supported.includes(type))
 }
 
 async function authPlain(transport: SmtpTransport, credentials: Credentials): Promise<void> {

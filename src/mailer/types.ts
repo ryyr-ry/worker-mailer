@@ -3,6 +3,7 @@ import type { DsnOptions, EmailOptions } from "../email/types"
 import { WorkerMailerError } from "../errors"
 import type { LogLevel } from "../logger"
 import type { SendResult } from "../result"
+import type { MailPlugin } from "./plugin"
 
 export type AuthType = "plain" | "login" | "cram-md5"
 
@@ -12,10 +13,14 @@ export type Credentials = {
 }
 
 export interface Mailer {
-	send(options: EmailOptions): Promise<SendResult>
+	send(options: EmailOptions, sendOptions?: SendOptions): Promise<SendResult>
 	close(): Promise<void>
 	ping(): Promise<boolean>
 	[Symbol.asyncDispose](): Promise<void>
+}
+
+export type SendOptions = {
+	dryRun?: boolean
 }
 
 export type SendHooks = {
@@ -54,6 +59,7 @@ export type WorkerMailerOptions = {
 	autoReconnect?: boolean
 	hooks?: SendHooks
 	dkim?: DkimOptions
+	plugins?: MailPlugin[]
 }
 
 export type SmtpCapabilities = {
