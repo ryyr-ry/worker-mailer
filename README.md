@@ -19,8 +19,9 @@ Built entirely on the [`cloudflare:sockets`](https://developers.cloudflare.com/w
 - 📅 **Calendar invites** — iCalendar (.ics) generation with MIME integration
 - 🔏 **DKIM signing** — RSA-SHA256 via Web Crypto API
 - 🔒 **SMTP auth** — `plain`, `login`, and `CRAM-MD5`
-- 🪝 **Send hooks** — `beforeSend` / `afterSend` / lifecycle event hooks
-- 🧪 **Mock mailer** — `MockMailer` for testing with assertion helpers
+- 🪝 **Send hooks & plugins** — `beforeSend` / `afterSend` / lifecycle plugins
+- 🧪 **Mock mailer & assertions** — `MockMailer` plus chainable test helpers
+- 🛰️ **Telemetry & dry run** — observe sends and validate recipients without sending DATA
 - 👁️ **Email preview** — `previewEmail()` for MIME inspection without sending
 - 🏓 **Health check** — `ping()` via SMTP NOOP command
 - ⚡ **Zero-config helpers** — `sendOnce()`, `fromEnv()`, `createFromEnv()` read env vars automatically
@@ -162,6 +163,32 @@ console.log(mock.hasSentWithSubject("Test")) // true
 console.log(mock.sentEmails) // ReadonlyArray of all sent emails
 
 mock.clear() // reset state
+```
+
+### Assertion helpers
+
+```typescript
+import { MockMailer, assertSent } from "@ryyr/worker-mailer/testing"
+
+const mock = new MockMailer()
+
+await mock.send({
+	from: "app@example.com",
+	to: "user@example.com",
+	subject: "Welcome",
+	text: "Hello",
+	headers: { "X-Trace": "abc123" },
+})
+
+assertSent(mock)
+	.from("app@example.com")
+	.to("user@example.com")
+	.withSubject("Welcome")
+	.withHeader("X-Trace", "abc123")
+	.exists()
+
+mock.assertSendCount(1)
+mock.assertNthSent(1).withText("Hello").exists()
 ```
 
 ### Simulating errors and delays
@@ -343,6 +370,50 @@ type SendHooks = {
 	onReconnecting?: (info: { attempt: number }) => void
 	onFatalError?: (error: Error) => void
 }
+```
+
+### Plugins, telemetry, and dry run
+
+Hooks remain supported, but you can now attach reusable plugins through `plugins`:
+
+```typescript
+import type { MailPlugin } from "@ryyr/worker-mailer"
+import { telemetryPlugin } from "@ryyr/worker-mailer/plugins"
+
+const auditPlugin: MailPlugin = {
+	name: "audit",
+	beforeSend: (email) => ({ ...email, subject: `[AUDIT] ${email.subject}` }),
+}
+
+const mailer = await WorkerMailer.connect({
+	host: "smtp.example.com",
+	port: 587,
+	username: "user@example.com",
+	password: "password",
+	authType: ["plain"],
+	plugins: [
+		auditPlugin,
+		telemetryPlugin({
+			onEvent: (event) => {
+				console.log(event.type, event)
+			},
+		}),
+	],
+})
+
+const result = await mailer.send(
+	{
+		from: "sender@example.com",
+		to: ["ok@example.com", "reject@example.com"],
+		subject: "Recipient validation",
+		text: "This is a dry run.",
+	},
+	{ dryRun: true },
+)
+
+console.log(result.accepted)
+console.log(result.rejected)
+console.log(result.response) // "DRY RUN: no message sent"
 ```
 
 ## Email Preview
@@ -789,7 +860,14 @@ type WorkerMailerOptions = {
 	maxRetries?: number // Retry count on failure (default: 3)
 	autoReconnect?: boolean // Auto-reconnect on disconnect (default: false)
 	hooks?: SendHooks // Send & lifecycle hooks
+	plugins?: MailPlugin[] // Reusable send/lifecycle plugins
 	dkim?: DkimOptions // DKIM signing configuration
+}
+```
+
+```typescript
+type SendOptions = {
+	dryRun?: boolean // Validate MAIL FROM / RCPT TO only, skip DATA
 }
 ```
 

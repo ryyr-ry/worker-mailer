@@ -77,6 +77,37 @@ export async function rcptTo({
 	}
 }
 
+export type RcptToCollectResult = {
+	accepted: string[]
+	rejected: Array<{ email: string; response: string }>
+}
+
+export async function rcptToCollect({
+	transport,
+	recipients,
+	capabilities,
+	dsnGlobal,
+	dsnOverride,
+}: RcptToParams): Promise<RcptToCollectResult> {
+	const accepted: string[] = []
+	const rejected: Array<{ email: string; response: string }> = []
+	for (const user of recipients) {
+		let message = `RCPT TO: <${user.email}>`
+		const hasNotifyConfig = dsnOverride?.NOTIFY !== undefined || dsnGlobal?.NOTIFY !== undefined
+		if (capabilities.supportsDSN && hasNotifyConfig) {
+			message += buildNotify(dsnGlobal, dsnOverride)
+		}
+		await transport.writeLine(message)
+		const rcptResponse = await transport.readTimeout()
+		if (rcptResponse.startsWith("2")) {
+			accepted.push(user.email)
+		} else {
+			rejected.push({ email: user.email, response: rcptResponse.trim() })
+		}
+	}
+	return { accepted, rejected }
+}
+
 export async function dataCommand(transport: SmtpTransport): Promise<void> {
 	await transport.writeLine("DATA")
 	const response = await transport.readTimeout()

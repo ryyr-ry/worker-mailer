@@ -72,6 +72,11 @@
 			"types": "./dist/builder.d.ts",
 			"import": "./dist/builder.mjs",
 			"require": "./dist/builder.js"
+		},
+		"./plugins": {
+			"types": "./dist/plugins.d.ts",
+			"import": "./dist/plugins.mjs",
+			"require": "./dist/plugins.js"
 		}
 	},
 	"keywords": [

@@ -31,6 +31,8 @@ export class Email {
 
 	public readonly headers: Record<string, string>
 
+	public isDryRun = false
+
 	public setSentResult!: (result: SendResult) => void
 	public setSentError!: (e: unknown) => void
 
